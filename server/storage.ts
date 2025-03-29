@@ -2,9 +2,16 @@ import {
   users, type User, type InsertUser, 
   gestures, type Gesture, type InsertGesture,
   gestureVariations, type GestureVariation, type InsertGestureVariation,
-  userProgress, type UserProgress
+  userProgress, type UserProgress, type InsertUserProgress,
+  userTrainingSamples, type UserTrainingSample, type InsertUserTrainingSample,
+  recognitionSessions, type RecognitionSession,
+  recognitionAttempts, type RecognitionAttempt,
+  modelMetrics, type ModelMetric,
+  learningPaths, type LearningPath,
+  learningPathGestures,
+  gestureRelationships, type GestureRelationship
 } from "@shared/schema";
-import { eq } from 'drizzle-orm';
+import { eq, and, or, like, desc, sql, inArray } from 'drizzle-orm';
 import { db } from './db';
 
 export interface IStorage {
@@ -12,18 +19,46 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserSkillLevel(id: number, skillLevel: string): Promise<User | undefined>;
   
   // Basic gesture methods
   getAllGestures(): Promise<Gesture[]>;
   getGesturesByType(type: string): Promise<Gesture[]>;
+  getGesturesByCategory(category: string): Promise<Gesture[]>;
+  getGesturesByComplexity(minComplexity: number, maxComplexity: number): Promise<Gesture[]>;
+  searchGestures(query: string): Promise<Gesture[]>;
   getGesture(id: number): Promise<Gesture | undefined>;
   getGestureByName(name: string): Promise<Gesture | undefined>;
   createGesture(gesture: InsertGesture): Promise<Gesture>;
+  updateGesture(id: number, gesture: Partial<InsertGesture>): Promise<Gesture | undefined>;
   
-  // Advanced gesture methods for improved recognition
+  // Advanced gesture methods for improved MS-ASL recognition
   getGestureVariations(gestureId: number): Promise<GestureVariation[]>;
   addGestureVariation(variation: InsertGestureVariation): Promise<GestureVariation>;
   updateGestureFingerPattern(id: number, fingerPattern: boolean[]): Promise<Gesture | undefined>;
+  getSimilarGestures(gestureId: number): Promise<Gesture[]>;
+  getGesturesByHandShape(handShape: string): Promise<Gesture[]>;
+  getMotionBasedGestures(): Promise<Gesture[]>;
+  getTwoHandedGestures(): Promise<Gesture[]>;
+  
+  // User training and personalization
+  addUserTrainingSample(sample: InsertUserTrainingSample): Promise<UserTrainingSample>;
+  getUserTrainingSamples(userId: number, gestureId?: number): Promise<UserTrainingSample[]>;
+  
+  // User progress tracking
+  getUserProgress(userId: number): Promise<UserProgress[]>;
+  updateUserProgress(userId: number, gestureId: number, data: Partial<InsertUserProgress>): Promise<UserProgress>;
+  getRecommendedGestures(userId: number, count?: number): Promise<Gesture[]>;
+  
+  // Learning paths
+  getAllLearningPaths(): Promise<LearningPath[]>;
+  getLearningPathGestures(pathId: number): Promise<Gesture[]>;
+  
+  // Analytics and model performance
+  recordRecognitionAttempt(sessionId: number, gestureId: number, successful: boolean, confidence: number, actualGestureId?: number): Promise<void>;
+  getRecognitionStats(userId?: number, timeRange?: {start: Date, end: Date}): Promise<any>;
+  updateModelMetrics(metrics: Partial<ModelMetric>): Promise<ModelMetric>;
+  getLatestModelMetrics(): Promise<ModelMetric | undefined>;
   
   // Database setup
   setupDatabase(): Promise<void>;
@@ -69,6 +104,19 @@ export class PostgresStorage implements IStorage {
   async createGesture(insertGesture: InsertGesture): Promise<Gesture> {
     const result = await db.insert(gestures).values(insertGesture).returning();
     return result[0];
+  }
+  
+  async updateGesture(id: number, gestureData: Partial<InsertGesture>): Promise<Gesture | undefined> {
+    try {
+      const result = await db.update(gestures)
+        .set(gestureData)
+        .where(eq(gestures.id, id))
+        .returning();
+      return result[0];
+    } catch (error) {
+      console.error("Error updating gesture:", error);
+      return undefined;
+    }
   }
   
   // Advanced gesture methods
@@ -736,6 +784,26 @@ export class MemStorage implements IStorage {
     return gesture;
   }
   
+  async updateGesture(id: number, gestureData: Partial<InsertGesture>): Promise<Gesture | undefined> {
+    const existingGesture = this.gestures.get(id);
+    if (!existingGesture) {
+      return undefined;
+    }
+    
+    // Update the existing gesture with new data
+    const updatedGesture: Gesture = {
+      ...existingGesture,
+      ...gestureData,
+      // Make sure these fields are properly handled
+      hasMotion: gestureData.hasMotion !== undefined ? gestureData.hasMotion : existingGesture.hasMotion,
+      isTwoHanded: gestureData.isTwoHanded !== undefined ? gestureData.isTwoHanded : existingGesture.isTwoHanded,
+      fingerPattern: gestureData.fingerPattern !== undefined ? gestureData.fingerPattern : existingGesture.fingerPattern,
+    };
+    
+    this.gestures.set(id, updatedGesture);
+    return updatedGesture;
+  }
+  
   async getGestureVariations(gestureId: number): Promise<GestureVariation[]> {
     return this.variations.get(gestureId) || [];
   }
@@ -774,5 +842,360 @@ export class MemStorage implements IStorage {
 }
 
 // Choose the right storage implementation based on environment
+// Add implementation for missing methods in PostgresStorage
+// User methods
+PostgresStorage.prototype.updateUserSkillLevel = async function(id: number, skillLevel: string): Promise<User | undefined> {
+  try {
+    const result = await db.update(users)
+      .set({ skillLevel })
+      .where(eq(users.id, id))
+      .returning();
+    return result[0];
+  } catch (error) {
+    console.error("Error updating user skill level:", error);
+    return undefined;
+  }
+};
+
+// Advanced gesture search/query methods
+PostgresStorage.prototype.getGesturesByCategory = async function(category: string): Promise<Gesture[]> {
+  return await db.select().from(gestures).where(eq(gestures.category, category));
+};
+
+PostgresStorage.prototype.getGesturesByComplexity = async function(minComplexity: number, maxComplexity: number): Promise<Gesture[]> {
+  return await db.select().from(gestures)
+    .where(
+      and(
+        sql`${gestures.complexity} >= ${minComplexity}`,
+        sql`${gestures.complexity} <= ${maxComplexity}`
+      )
+    );
+};
+
+PostgresStorage.prototype.searchGestures = async function(query: string): Promise<Gesture[]> {
+  return await db.select().from(gestures)
+    .where(
+      or(
+        like(gestures.name, `%${query}%`),
+        like(gestures.description, `%${query}%`),
+        like(gestures.category, `%${query}%`)
+      )
+    );
+};
+
+PostgresStorage.prototype.updateGesture = async function(id: number, gesture: Partial<InsertGesture>): Promise<Gesture | undefined> {
+  try {
+    const result = await db.update(gestures)
+      .set(gesture)
+      .where(eq(gestures.id, id))
+      .returning();
+    return result[0];
+  } catch (error) {
+    console.error("Error updating gesture:", error);
+    return undefined;
+  }
+};
+
+// MS-ASL specific methods
+PostgresStorage.prototype.getSimilarGestures = async function(gestureId: number): Promise<Gesture[]> {
+  // First check if there are explicit relationships defined
+  const relationships = await db.select()
+    .from(gestureRelationships)
+    .where(eq(gestureRelationships.gestureId1, gestureId));
+  
+  if (relationships.length > 0) {
+    const relatedIds = relationships.map(r => r.gestureId2);
+    return await db.select().from(gestures).where(inArray(gestures.id, relatedIds));
+  }
+  
+  // Otherwise, find by similar properties
+  const targetGesture = await this.getGesture(gestureId);
+  if (!targetGesture) return [];
+  
+  return await db.select().from(gestures)
+    .where(
+      and(
+        eq(gestures.type, targetGesture.type),
+        eq(gestures.hasMotion, targetGesture.hasMotion),
+        sql`${gestures.id} != ${gestureId}`
+      )
+    )
+    .limit(5);
+};
+
+PostgresStorage.prototype.getGesturesByHandShape = async function(handShape: string): Promise<Gesture[]> {
+  return await db.select().from(gestures).where(eq(gestures.handShape, handShape));
+};
+
+PostgresStorage.prototype.getMotionBasedGestures = async function(): Promise<Gesture[]> {
+  return await db.select().from(gestures).where(eq(gestures.hasMotion, true));
+};
+
+PostgresStorage.prototype.getTwoHandedGestures = async function(): Promise<Gesture[]> {
+  return await db.select().from(gestures).where(eq(gestures.isTwoHanded, true));
+};
+
+// User training
+PostgresStorage.prototype.addUserTrainingSample = async function(sample: InsertUserTrainingSample): Promise<UserTrainingSample> {
+  const result = await db.insert(userTrainingSamples)
+    .values(sample)
+    .returning();
+  return result[0];
+};
+
+PostgresStorage.prototype.getUserTrainingSamples = async function(userId: number, gestureId?: number): Promise<UserTrainingSample[]> {
+  if (gestureId) {
+    return await db.select()
+      .from(userTrainingSamples)
+      .where(
+        and(
+          eq(userTrainingSamples.userId, userId),
+          eq(userTrainingSamples.gestureId, gestureId)
+        )
+      );
+  }
+  return await db.select()
+    .from(userTrainingSamples)
+    .where(eq(userTrainingSamples.userId, userId));
+};
+
+// User progress tracking
+PostgresStorage.prototype.getUserProgress = async function(userId: number): Promise<UserProgress[]> {
+  return await db.select()
+    .from(userProgress)
+    .where(eq(userProgress.userId, userId));
+};
+
+PostgresStorage.prototype.updateUserProgress = async function(userId: number, gestureId: number, data: Partial<InsertUserProgress>): Promise<UserProgress> {
+  // Check if progress record exists
+  const existing = await db.select()
+    .from(userProgress)
+    .where(
+      and(
+        eq(userProgress.userId, userId),
+        eq(userProgress.gestureId, gestureId)
+      )
+    );
+  
+  if (existing.length > 0) {
+    // Update existing record
+    const result = await db.update(userProgress)
+      .set(data)
+      .where(
+        and(
+          eq(userProgress.userId, userId),
+          eq(userProgress.gestureId, gestureId)
+        )
+      )
+      .returning();
+    return result[0];
+  } else {
+    // Create new record
+    const newRecord = {
+      userId,
+      gestureId,
+      ...data
+    };
+    const result = await db.insert(userProgress)
+      .values(newRecord)
+      .returning();
+    return result[0];
+  }
+};
+
+PostgresStorage.prototype.getRecommendedGestures = async function(userId: number, count: number = 5): Promise<Gesture[]> {
+  // Get user's progress
+  const userProgressData = await this.getUserProgress(userId);
+  
+  // If user has no progress, recommend beginner gestures
+  if (userProgressData.length === 0) {
+    return await db.select()
+      .from(gestures)
+      .where(eq(gestures.complexity, 1))
+      .limit(count);
+  }
+  
+  // Find gestures the user hasn't practiced yet or practiced least
+  const practiced = new Set(userProgressData.map(p => p.gestureId));
+  
+  // First try to find gestures not practiced yet
+  if (practiced.size > 0) {
+    const unpracticedGestures = await db.select()
+      .from(gestures)
+      .where(sql`${gestures.id} NOT IN (${Array.from(practiced).join(',')})`)
+      .limit(count);
+    
+    if (unpracticedGestures.length >= count) {
+      return unpracticedGestures;
+    }
+    
+    // If not enough unpracticed gestures, add some from least practiced
+    const remaining = count - unpracticedGestures.length;
+    const leastPracticed = await db.select()
+      .from(gestures)
+      .innerJoin(userProgress, eq(gestures.id, userProgress.gestureId))
+      .where(eq(userProgress.userId, userId))
+      .orderBy(userProgress.practiceCount)
+      .limit(remaining);
+    
+    return [...unpracticedGestures, ...leastPracticed];
+  }
+  
+  // Fallback to complexity-based recommendation
+  return await db.select()
+    .from(gestures)
+    .orderBy(gestures.complexity)
+    .limit(count);
+};
+
+// Learning paths
+PostgresStorage.prototype.getAllLearningPaths = async function(): Promise<LearningPath[]> {
+  return await db.select().from(learningPaths);
+};
+
+PostgresStorage.prototype.getLearningPathGestures = async function(pathId: number): Promise<Gesture[]> {
+  const result = await db.select()
+    .from(learningPathGestures)
+    .innerJoin(gestures, eq(learningPathGestures.gestureId, gestures.id))
+    .where(eq(learningPathGestures.pathId, pathId))
+    .orderBy(learningPathGestures.order);
+  
+  return result.map(r => ({
+    id: r.gestures.id,
+    name: r.gestures.name,
+    type: r.gestures.type,
+    category: r.gestures.category,
+    description: r.gestures.description,
+    fingerPattern: r.gestures.fingerPattern,
+    handShape: r.gestures.handShape,
+    hasMotion: r.gestures.hasMotion,
+    motionType: r.gestures.motionType,
+    motionDirection: r.gestures.motionDirection,
+    isTwoHanded: r.gestures.isTwoHanded,
+    dominantHand: r.gestures.dominantHand,
+    nonDominantHandShape: r.gestures.nonDominantHandShape,
+    faceExpression: r.gestures.faceExpression,
+    bodyMovement: r.gestures.bodyMovement,
+    complexity: r.gestures.complexity,
+    msaslClass: r.gestures.msaslClass,
+    msaslVariant: r.gestures.msaslVariant,
+    confidence: r.gestures.confidence,
+    imageUrl: r.gestures.imageUrl,
+    videoUrl: r.gestures.videoUrl,
+    examples: r.gestures.examples,
+    similarSigns: r.gestures.similarSigns,
+    featureVector: r.gestures.featureVector,
+    detectionThreshold: r.gestures.detectionThreshold,
+    falsePositiveRate: r.gestures.falsePositiveRate,
+    createdAt: r.gestures.createdAt,
+    updatedAt: r.gestures.updatedAt
+  }));
+};
+
+// Analytics
+PostgresStorage.prototype.recordRecognitionAttempt = async function(
+  sessionId: number, 
+  gestureId: number, 
+  successful: boolean, 
+  confidence: number, 
+  actualGestureId?: number
+): Promise<void> {
+  await db.insert(recognitionAttempts)
+    .values({
+      sessionId,
+      gestureId,
+      successful,
+      confidence,
+      actualGesture: actualGestureId,
+    });
+  
+  // Update session stats
+  await db.update(recognitionSessions)
+    .set({
+      totalGestures: sql`${recognitionSessions.totalGestures} + 1`,
+      successfulRecognitions: successful 
+        ? sql`${recognitionSessions.successfulRecognitions} + 1` 
+        : recognitionSessions.successfulRecognitions
+    })
+    .where(eq(recognitionSessions.id, sessionId));
+};
+
+PostgresStorage.prototype.getRecognitionStats = async function(
+  userId?: number, 
+  timeRange?: {start: Date, end: Date}
+): Promise<any> {
+  let query = db.select({
+    totalAttempts: sql`COUNT(*)`,
+    successfulAttempts: sql`SUM(CASE WHEN ${recognitionAttempts.successful} THEN 1 ELSE 0 END)`,
+    avgConfidence: sql`AVG(${recognitionAttempts.confidence})`,
+    avgProcessingTime: sql`AVG(${recognitionAttempts.processingTime})`
+  })
+  .from(recognitionAttempts)
+  .innerJoin(recognitionSessions, eq(recognitionAttempts.sessionId, recognitionSessions.id));
+  
+  // Apply filters
+  if (userId) {
+    query = query.where(eq(recognitionSessions.userId, userId));
+  }
+  
+  if (timeRange) {
+    query = query.where(
+      and(
+        sql`${recognitionAttempts.timestamp} >= ${timeRange.start.toISOString()}`,
+        sql`${recognitionAttempts.timestamp} <= ${timeRange.end.toISOString()}`
+      )
+    );
+  }
+  
+  const [result] = await query;
+  return result;
+};
+
+PostgresStorage.prototype.updateModelMetrics = async function(metrics: Partial<ModelMetric>): Promise<ModelMetric> {
+  const metricData = {
+    modelVersion: metrics.modelVersion || '1.0',
+    accuracy: metrics.accuracy,
+    precision: metrics.precision,
+    recall: metrics.recall,
+    f1Score: metrics.f1Score,
+    confusionMatrix: metrics.confusionMatrix,
+    topConfusedPairs: metrics.topConfusedPairs
+  };
+  
+  const result = await db.insert(modelMetrics)
+    .values(metricData)
+    .returning();
+  
+  return result[0];
+};
+
+PostgresStorage.prototype.getLatestModelMetrics = async function(): Promise<ModelMetric | undefined> {
+  const result = await db.select()
+    .from(modelMetrics)
+    .orderBy(desc(modelMetrics.metricsDate))
+    .limit(1);
+  
+  return result[0];
+};
+
+// Also add stubs for MemStorage but we'll focus on the PostgreSQL implementation
+for (const method of [
+  'updateUserSkillLevel', 'getGesturesByCategory', 'getGesturesByComplexity', 
+  'searchGestures', 'updateGesture', 'getSimilarGestures', 'getGesturesByHandShape',
+  'getMotionBasedGestures', 'getTwoHandedGestures', 'addUserTrainingSample',
+  'getUserTrainingSamples', 'getUserProgress', 'updateUserProgress',
+  'getRecommendedGestures', 'getAllLearningPaths', 'getLearningPathGestures',
+  'recordRecognitionAttempt', 'getRecognitionStats', 'updateModelMetrics',
+  'getLatestModelMetrics'
+]) {
+  if (!MemStorage.prototype[method]) {
+    MemStorage.prototype[method] = async function(...args: any[]) {
+      console.warn(`Method ${method} not implemented in MemStorage`);
+      return method.startsWith('get') ? [] : undefined;
+    };
+  }
+}
+
+// Force PostgreSQL for our MS-ASL enhanced application
 const usePostgres = process.env.DATABASE_URL && process.env.DATABASE_URL.length > 0;
 export const storage = usePostgres ? new PostgresStorage() : new MemStorage();

@@ -108,13 +108,54 @@ export class PostgresStorage implements IStorage {
   
   async updateGesture(id: number, gestureData: Partial<InsertGesture>): Promise<Gesture | undefined> {
     try {
+      console.log(`PostgresStorage: Updating gesture ${id} with data:`, gestureData);
+      
+      // Transform camelCase to snake_case for PostgreSQL
+      const dbFormattedData: Record<string, any> = {};
+      
+      // Manual mapping for each field to ensure proper column names
+      if (gestureData.name !== undefined) dbFormattedData.name = gestureData.name;
+      if (gestureData.type !== undefined) dbFormattedData.type = gestureData.type;
+      if (gestureData.category !== undefined) dbFormattedData.category = gestureData.category;
+      if (gestureData.description !== undefined) dbFormattedData.description = gestureData.description;
+      if (gestureData.fingerPattern !== undefined) dbFormattedData.finger_pattern = gestureData.fingerPattern;
+      if (gestureData.handShape !== undefined) dbFormattedData.hand_shape = gestureData.handShape;
+      if (gestureData.hasMotion !== undefined) dbFormattedData.has_motion = gestureData.hasMotion;
+      if (gestureData.motionType !== undefined) dbFormattedData.motion_type = gestureData.motionType;
+      if (gestureData.motionDirection !== undefined) dbFormattedData.motion_direction = gestureData.motionDirection;
+      if (gestureData.isTwoHanded !== undefined) dbFormattedData.is_two_handed = gestureData.isTwoHanded;
+      if (gestureData.dominantHand !== undefined) dbFormattedData.dominant_hand = gestureData.dominantHand;
+      if (gestureData.nonDominantHandShape !== undefined) dbFormattedData.non_dominant_hand_shape = gestureData.nonDominantHandShape;
+      if (gestureData.faceExpression !== undefined) dbFormattedData.face_expression = gestureData.faceExpression;
+      if (gestureData.bodyMovement !== undefined) dbFormattedData.body_movement = gestureData.bodyMovement;
+      if (gestureData.complexity !== undefined) dbFormattedData.complexity = gestureData.complexity;
+      if (gestureData.msaslClass !== undefined) dbFormattedData.msasl_class = gestureData.msaslClass;
+      if (gestureData.msaslVariant !== undefined) dbFormattedData.msasl_variant = gestureData.msaslVariant;
+      if (gestureData.confidence !== undefined) dbFormattedData.confidence = gestureData.confidence;
+      if (gestureData.imageUrl !== undefined) dbFormattedData.image_url = gestureData.imageUrl;
+      if (gestureData.videoUrl !== undefined) dbFormattedData.video_url = gestureData.videoUrl;
+      if (gestureData.examples !== undefined) dbFormattedData.examples = gestureData.examples;
+      if (gestureData.similarSigns !== undefined) dbFormattedData.similar_signs = gestureData.similarSigns;
+      if (gestureData.featureVector !== undefined) dbFormattedData.feature_vector = gestureData.featureVector;
+      if (gestureData.detectionThreshold !== undefined) dbFormattedData.detection_threshold = gestureData.detectionThreshold;
+      if (gestureData.falsePositiveRate !== undefined) dbFormattedData.false_positive_rate = gestureData.falsePositiveRate;
+      
+      // Always update the updated_at field
+      dbFormattedData.updated_at = new Date();
+      
+      console.log(`PostgresStorage: Formatted data for DB:`, dbFormattedData);
+      
+      // Execute the query with properly formatted column names
       const result = await db.update(gestures)
-        .set(gestureData)
+        .set(dbFormattedData)
         .where(eq(gestures.id, id))
         .returning();
+      
+      console.log(`PostgresStorage: Update result:`, result ? `Found ${result.length} rows` : 'No results');
+      
       return result[0];
     } catch (error) {
-      console.error("Error updating gesture:", error);
+      console.error("PostgresStorage Error updating gesture:", error);
       return undefined;
     }
   }
@@ -135,10 +176,19 @@ export class PostgresStorage implements IStorage {
   
   async updateGestureFingerPattern(id: number, fingerPattern: boolean[]): Promise<Gesture | undefined> {
     try {
+      console.log(`PostgresStorage: Updating finger pattern for gesture ${id}:`, fingerPattern);
+      
+      // Use snake_case field name for PostgreSQL column
       const result = await db.update(gestures)
-        .set({ fingerPattern: JSON.stringify(fingerPattern) })
+        .set({ 
+          finger_pattern: JSON.stringify(fingerPattern),
+          updated_at: new Date()
+        })
         .where(eq(gestures.id, id))
         .returning();
+      
+      console.log(`PostgresStorage: Finger pattern update result:`, result ? `Found ${result.length} rows` : 'No results');
+      
       return result[0];
     } catch (error) {
       console.error("Error updating finger pattern:", error);

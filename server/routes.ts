@@ -237,19 +237,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid gesture ID" });
       }
       
+      console.log(`PATCH request for gesture ${id} with data:`, req.body);
+      
       // Find the gesture first
       const existingGesture = await storage.getGesture(id);
       if (!existingGesture) {
+        console.log(`Gesture ${id} not found`);
         return res.status(404).json({ message: "Gesture not found" });
       }
+      
+      console.log(`Found existing gesture: ${existingGesture.name}`);
       
       // For now, we're trusting the input since we're just for updates from our application
       const updatedGesture = await storage.updateGesture(id, req.body);
       
+      console.log(`Update result:`, updatedGesture ? 'Success' : 'Failed');
+      
       // Make sure we set the content type explicitly to prevent express from serving HTML
       res.setHeader('Content-Type', 'application/json');
-      res.json(updatedGesture);
+      
+      if (updatedGesture) {
+        res.json(updatedGesture);
+      } else {
+        res.status(500).json({ message: "Failed to update gesture" });
+      }
     } catch (error: any) {
+      console.error('Error updating gesture:', error);
       res.setHeader('Content-Type', 'application/json');
       res.status(500).json({ message: error.message });
     }

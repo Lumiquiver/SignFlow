@@ -4,33 +4,70 @@ import { HandDetectionState } from '../types';
 
 // Initialize the handpose model
 let handposeModel: handpose.HandPose | null = null;
+let isModelLoading = false;
 
-export async function initializeHandpose(): Promise<void> {
-  // Load the TensorFlow.js core
-  await tf.ready();
+export async function initializeHandpose(): Promise<handpose.HandPose> {
+  // If model is already loaded, return it
+  if (handposeModel) {
+    return handposeModel;
+  }
   
-  // Load the handpose model
-  handposeModel = await handpose.load({
-    detectionConfidence: 0.8,
-    maxContinuousChecks: 10,
-    iouThreshold: 0.3,
-    scoreThreshold: 0.75,
-  });
-  
-  console.log("Handpose model loaded");
-}
-
-export async function detectHands(video: HTMLVideoElement): Promise<HandDetectionState> {
-  if (!handposeModel) {
-    console.error("Handpose model not initialized");
-    return {
-      isDetecting: false,
-      detectionStatus: "error",
-      detectedHands: false
-    };
+  // If model is already loading, wait for it
+  if (isModelLoading) {
+    return new Promise((resolve, reject) => {
+      const checkInterval = setInterval(() => {
+        if (handposeModel) {
+          clearInterval(checkInterval);
+          resolve(handposeModel);
+        }
+      }, 100);
+      
+      // Timeout after 30 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        reject(new Error("Handpose model loading timeout"));
+      }, 30000);
+    });
   }
   
   try {
+    isModelLoading = true;
+    
+    // Load TensorFlow.js backend
+    await tf.setBackend('webgl');
+    await tf.ready();
+    
+    // Load the handpose model with more appropriate settings for browser
+    console.log("Loading handpose model...");
+    handposeModel = await handpose.load({
+      detectionConfidence: 0.7,  // Slightly lower to improve detection rate
+      maxContinuousChecks: 5,   // Reduced for better performance
+      iouThreshold: 0.3,
+      scoreThreshold: 0.6,      // Slightly lower to improve detection rate
+    });
+    
+    console.log("Handpose model loaded successfully");
+    return handposeModel;
+  } catch (error) {
+    console.error("Failed to load handpose model:", error);
+    throw error;
+  } finally {
+    isModelLoading = false;
+  }
+}
+
+export async function detectHands(video: HTMLVideoElement): Promise<HandDetectionState> {
+  try {
+    // Ensure model is initialized
+    if (!handposeModel) {
+      return {
+        isDetecting: false,
+        detectionStatus: "error",
+        detectedHands: false
+      };
+    }
+    
+    // Make prediction
     const predictions = await handposeModel.estimateHands(video);
     
     if (predictions.length > 0) {
@@ -81,4 +118,9 @@ export async function detectHands(video: HTMLVideoElement): Promise<HandDetectio
       detectedHands: false
     };
   }
+}
+
+// Utility function to get the handpose model directly
+export function getHandposeModel(): handpose.HandPose | null {
+  return handposeModel;
 }

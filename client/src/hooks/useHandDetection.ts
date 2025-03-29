@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { initializeHandpose, detectHands } from '../lib/handDetection';
+import { initializeHandpose, detectHands, getHandposeModel } from '../lib/handDetection';
 import { recognizeGesture } from '../lib/gestureRecognition';
 import { HandDetectionState, DetectedGesture, Gesture } from '../types';
 
@@ -29,6 +29,7 @@ export function useHandDetection({
   const detectionLoopRef = useRef<number | null>(null);
   const lastDetectedGestureRef = useRef<string | null>(null);
   const detectionCountRef = useRef<number>(0);
+  const handposeModelRef = useRef<any>(null);
   
   // Load the handpose model when component mounts
   useEffect(() => {
@@ -36,8 +37,12 @@ export function useHandDetection({
     
     const loadModel = async () => {
       try {
-        await initializeHandpose();
+        console.log("Starting handpose model initialization...");
+        const model = await initializeHandpose();
+        handposeModelRef.current = model;
+        
         if (mounted) {
+          console.log("Handpose model initialization complete");
           setIsModelReady(true);
         }
       } catch (err) {
@@ -65,6 +70,7 @@ export function useHandDetection({
       return;
     }
     
+    console.log("Starting detection loop with model ready:", isModelReady);
     const video = videoRef.current;
     let lastDetectionTime = 0;
     
@@ -76,54 +82,64 @@ export function useHandDetection({
           detectionStatus: prev.detectedHands ? 'recognizing' : 'detecting'
         }));
         
-        const handState = await detectHands(video);
-        
-        if (handState.detectedHands) {
-          setDetectionState(prev => ({
-            ...prev, 
-            ...handState,
-            detectionStatus: 'recognized'
-          }));
+        try {
+          // First detect hands to get bounding box and detection status
+          const handState = await detectHands(video);
           
-          // Get hand landmarks from the handpose model directly in a real app
-          // For demo, we're using the mock data in the recognizeGesture function
-          const handposeModel = await import('@tensorflow-models/handpose');
-          const predictions = await handposeModel.default.load().then(
-            model => model.estimateHands(video)
-          );
-          
-          if (predictions.length > 0) {
-            const landmarks = predictions[0].landmarks;
-            const recognitionResult = await recognizeGesture(landmarks, availableGestures);
+          if (handState.detectedHands) {
+            setDetectionState(prev => ({
+              ...prev, 
+              ...handState,
+              detectionStatus: 'recognized'
+            }));
             
-            if (recognitionResult && recognitionResult.confidence > 0.7) {
-              // Only notify if it's a different gesture or repeated after threshold
-              // This prevents rapid-fire identical detections
-              if (
-                lastDetectedGestureRef.current !== recognitionResult.gesture.name ||
-                detectionCountRef.current > 10
-              ) {
-                lastDetectedGestureRef.current = recognitionResult.gesture.name;
-                detectionCountRef.current = 0;
+            // Use the already loaded model instance for gesture recognition
+            const model = getHandposeModel();
+            if (model) {
+              const predictions = await model.estimateHands(video);
+              
+              if (predictions.length > 0) {
+                const landmarks = predictions[0].landmarks;
+                const recognitionResult = await recognizeGesture(landmarks, availableGestures);
                 
-                onGestureDetected?.({
-                  gesture: recognitionResult.gesture.name,
-                  confidence: recognitionResult.confidence,
-                  timestamp: Date.now()
-                });
-              } else {
-                detectionCountRef.current++;
+                if (recognitionResult && recognitionResult.confidence > 0.7) {
+                  // Only notify if it's a different gesture or repeated after threshold
+                  // This prevents rapid-fire identical detections
+                  if (
+                    lastDetectedGestureRef.current !== recognitionResult.gesture.name ||
+                    detectionCountRef.current > 5 // Reduced threshold
+                  ) {
+                    lastDetectedGestureRef.current = recognitionResult.gesture.name;
+                    detectionCountRef.current = 0;
+                    
+                    onGestureDetected?.({
+                      gesture: recognitionResult.gesture.name,
+                      confidence: recognitionResult.confidence,
+                      timestamp: Date.now()
+                    });
+                  } else {
+                    detectionCountRef.current++;
+                  }
+                }
               }
             }
+          } else {
+            setDetectionState(prev => ({
+              ...prev,
+              ...handState
+            }));
+            
+            lastDetectedGestureRef.current = null;
+            detectionCountRef.current = 0;
           }
-        } else {
+        } catch (err) {
+          console.error("Error in detection loop:", err);
           setDetectionState(prev => ({
             ...prev,
-            ...handState
+            isDetecting: false,
+            detectionStatus: "error",
+            detectedHands: false
           }));
-          
-          lastDetectedGestureRef.current = null;
-          detectionCountRef.current = 0;
         }
         
         lastDetectionTime = timestamp;

@@ -84,86 +84,188 @@ export async function recognizeGesture(handLandmarks: number[][], availableGestu
     return null;
   }
   
-  // Extract features from current hand pose
-  const features = extractFeatures(handLandmarks);
-  
-  // In a real app, this would use a trained model to match features to gestures
-  // For demo purposes, we're implementing a highly simplified recognition system
-  
-  // Detect specific hand poses based on finger positions
-  const fingersExtended = detectExtendedFingers(handLandmarks);
-  
-  // Match finger positions to known gestures
-  let matchedGesture: Gesture | null = null;
-  let confidence = 0;
-  
-  // Find closest matching gesture based on the extended fingers pattern
-  // This is a simplistic approach for demonstration
-  const letterMatches = getFingerprintMatches(fingersExtended, availableGestures);
-  
-  if (letterMatches.length > 0) {
-    matchedGesture = letterMatches[0].gesture;
-    confidence = letterMatches[0].confidence;
+  try {
+    // Extract features from current hand pose
+    const features = extractFeatures(handLandmarks);
+    
+    // Detect specific hand poses based on finger positions
+    const fingersExtended = detectExtendedFingers(handLandmarks);
+    
+    // Add debug logging to see what's being detected
+    console.log("Fingers extended:", fingersExtended);
+    
+    // Match finger positions to known gestures
+    let matchedGesture: Gesture | null = null;
+    let confidence = 0;
+    
+    // Find closest matching gesture based on the extended fingers pattern
+    const letterMatches = getFingerprintMatches(fingersExtended, availableGestures);
+    
+    if (letterMatches.length > 0) {
+      matchedGesture = letterMatches[0].gesture;
+      confidence = letterMatches[0].confidence;
+      
+      // Log the top matches for debugging
+      console.log("Top matches:", letterMatches.slice(0, 3).map(m => 
+        `${m.gesture.name} (${(m.confidence * 100).toFixed(0)}%)`).join(", "));
+    }
+    
+    // If we found a gesture with good confidence, return it
+    if (matchedGesture && confidence > 0.65) {
+      return {
+        gesture: matchedGesture,
+        confidence
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Error in gesture recognition:", error);
+    return null;
   }
-  
-  // If we found a gesture with decent confidence, return it
-  if (matchedGesture && confidence > 0.5) {
-    return {
-      gesture: matchedGesture,
-      confidence
-    };
-  }
-  
-  return null;
 }
 
-// Simplistic algorithm to detect which fingers are extended
+// Enhanced algorithm to detect which fingers are extended
 function detectExtendedFingers(landmarks: number[][]): boolean[] {
   const wrist = landmarks[0];
-  const fingertips = [landmarks[4], landmarks[8], landmarks[12], landmarks[16], landmarks[20]];
-  const knuckles = [landmarks[2], landmarks[5], landmarks[9], landmarks[13], landmarks[17]];
+  const palm = landmarks[0]; // Palm center (approximated as wrist for simplicity)
   
+  // Finger joints:
+  // - First knuckle: landmarks[1,5,9,13,17] (MCP - metacarpophalangeal joint)
+  // - Second knuckle: landmarks[2,6,10,14,18] (PIP - proximal interphalangeal joint)
+  // - Third knuckle: landmarks[3,7,11,15,19] (DIP - distal interphalangeal joint)
+  // - Fingertips: landmarks[4,8,12,16,20]
+  
+  // Get all fingertips
+  const fingertips = [
+    landmarks[4],   // Thumb tip
+    landmarks[8],   // Index fingertip
+    landmarks[12],  // Middle fingertip
+    landmarks[16],  // Ring fingertip
+    landmarks[20]   // Pinky fingertip
+  ];
+  
+  // Get middle knuckles (PIP joints)
+  const midKnuckles = [
+    landmarks[2],   // Thumb IP joint
+    landmarks[6],   // Index PIP joint
+    landmarks[10],  // Middle PIP joint
+    landmarks[14],  // Ring PIP joint
+    landmarks[18]   // Pinky PIP joint
+  ];
+  
+  // Get base knuckles (MCP joints)
+  const baseKnuckles = [
+    landmarks[1],   // Thumb MCP joint
+    landmarks[5],   // Index MCP joint 
+    landmarks[9],   // Middle MCP joint
+    landmarks[13],  // Ring MCP joint
+    landmarks[17]   // Pinky MCP joint
+  ];
+  
+  // Calculate finger extension using multiple criteria
   return fingertips.map((tip, i) => {
-    const knuckle = knuckles[i];
-    // A finger is considered extended if the fingertip is further from the wrist than the knuckle
-    return distance(tip, wrist) > distance(knuckle, wrist) * 1.2;
+    // Skip special handling for thumb (i=0) which works differently
+    if (i === 0) {
+      // For thumb: check if it's extended to the side
+      const isThumbExtended = distance(tip, landmarks[17]) > distance(landmarks[1], landmarks[17]) * 0.9;
+      return isThumbExtended;
+    }
+    
+    const midKnuckle = midKnuckles[i];
+    const baseKnuckle = baseKnuckles[i];
+    
+    // For other fingers: multiple criteria to determine if extended
+    
+    // 1. Check if fingertip is farther from wrist than middle knuckle
+    const extensionRatio = distance(tip, wrist) / distance(midKnuckle, wrist);
+    
+    // 2. Calculate angle between joints to detect bend
+    const angle = angleBetweenThreePoints(baseKnuckle, midKnuckle, tip);
+    const isFingerStraight = angle > 145; // Near straight is > 145 degrees
+    
+    // 3. Check distance between fingertip and palm to ensure it's extended outward
+    const tipToPalmRatio = distance(tip, palm) / distance(baseKnuckle, palm);
+    
+    // Combine criteria with appropriate weights
+    return (extensionRatio > 1.2) && (tipToPalmRatio > 1.5 || isFingerStraight);
   });
 }
 
 // Simple pattern matching for ASL letters
 function getFingerprintMatches(fingersExtended: boolean[], availableGestures: Gesture[]): Array<{gesture: Gesture, confidence: number}> {
-  // Simplified fingerprint patterns for a few ASL letters
+  // Expanded and more accurate fingerprint patterns for ASL letters and common phrases
   const patterns: {[key: string]: boolean[]} = {
-    // For demo purposes - these are simplified approximations
+    // ASL alphabet finger patterns (thumb, index, middle, ring, pinky)
     'A': [false, false, false, false, false],
     'B': [false, true, true, true, true],
-    'C': [true, true, true, true, true], // More complex shape in reality
+    'C': [true, false, false, false, false], // Curved C shape
+    'D': [false, true, false, false, false],
+    'E': [false, false, false, false, false], // Curved hand
+    'F': [true, true, false, false, false],
+    'G': [false, true, false, false, false], // Point with index
+    'H': [false, true, true, false, false],
+    'I': [false, false, false, false, true],
+    'J': [false, false, false, false, true], // With movement
+    'K': [false, true, true, false, false],
     'L': [true, true, false, false, false],
+    'M': [false, false, false, false, false], // Three fingers folded
+    'N': [false, false, false, false, false], // Two fingers folded
+    'O': [true, false, false, false, false], // Circle shape
+    'P': [false, true, true, false, false], // Point down
+    'Q': [false, true, false, false, false], // Point down
+    'R': [false, true, true, false, false], // Crossed fingers
+    'S': [false, false, false, false, false], // Fist
+    'T': [false, false, false, false, false], // Thumb between index and middle
+    'U': [false, true, true, false, false],
+    'V': [false, true, true, false, false],
+    'W': [false, true, true, true, false],
+    'X': [false, false, false, false, false], // Bent index
     'Y': [true, false, false, false, true],
-    // Common phrases might need different recognition approaches in a real app
-    'Hello': [true, true, true, true, true], // Just a placeholder
-    'Thank You': [true, false, false, false, false], // Just a placeholder
+    'Z': [false, true, false, false, false], // Z motion
+    
+    // Common phrases - simplified for demo purposes
+    'Hello': [true, true, true, true, true], // Open hand wave
+    'Thank You': [false, false, false, false, true], // Hand from chin forward
+    'Please': [true, false, false, false, false], // Circular motion
+    'Sorry': [false, false, false, false, false], // Fist circular motion
+    'Help': [true, true, false, false, false], // One hand on other
+    'Yes': [false, false, false, false, false], // Nodding fist
+    'No': [false, true, true, false, false], // Sideways movement
+    'Good': [true, false, false, false, false], // Flat hand forward
+    'Bad': [false, false, false, false, false], // Thumb down
+    'Love': [true, true, false, false, true], // Crossed arms
   };
+  
+  // Add default patterns for any missing gestures (to avoid errors)
+  availableGestures.forEach(gesture => {
+    if (!patterns[gesture.name]) {
+      // Default to all fingers extended as fallback
+      patterns[gesture.name] = [true, true, true, true, true];
+    }
+  });
   
   // Match current pattern against known patterns
   const results = availableGestures
-    .filter(g => patterns[g.name]) // Only include gestures we have patterns for
     .map(gesture => {
       const pattern = patterns[gesture.name];
-      if (!pattern) return { gesture, confidence: 0 };
       
-      // Count matching fingers
-      let matches = 0;
+      // Count matching fingers with weighted scoring
+      // Thumb is less reliable, so it gets less weight
+      let weightedScore = 0;
+      const weights = [0.6, 1.0, 1.0, 1.0, 1.0]; // Thumb has lower weight
+      const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+      
       for (let i = 0; i < 5; i++) {
         if (fingersExtended[i] === pattern[i]) {
-          matches++;
+          weightedScore += weights[i];
         }
       }
       
-      const confidence = matches / 5; // Simple confidence score
+      const confidence = weightedScore / totalWeight;
       return { gesture, confidence };
     })
-    .filter(result => result.confidence > 0.4) // Only reasonable matches
+    .filter(result => result.confidence > 0.6) // Higher threshold for better accuracy
     .sort((a, b) => b.confidence - a.confidence); // Sort by confidence
   
   return results;

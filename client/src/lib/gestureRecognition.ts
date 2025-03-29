@@ -207,8 +207,29 @@ export async function recognizeGesture(handLandmarks: number[][], availableGestu
       confidence *= complexityAdjustment;
     }
     
+    // Set extremely strict thresholds based on gesture type for MS-ASL
+    // This makes our detection much more accurate but requires clearer signing
+    let confThreshold = 0.95; // Very high default threshold for MS-ASL
+    
+    // Adjust threshold based on sign type and complexity
+    if (matchedGesture) {
+      // Different thresholds for different types of signs
+      if (matchedGesture.type === 'alphabet') {
+        confThreshold = 0.88; // Strict for alphabet to prevent false positives
+      } else if (matchedGesture.type === 'phrase') {
+        confThreshold = 0.85; // Slightly less strict for phrases 
+      }
+      
+      // Further adjust threshold based on known complexity
+      if (matchedGesture.complexity !== undefined) {
+        // Allow slightly lower threshold for more complex signs
+        // But still maintain high overall standards
+        confThreshold -= (matchedGesture.complexity * 0.01);
+      }
+    }
+    
     // If we found a gesture with high enough confidence (MS-ASL threshold), return it
-    if (matchedGesture && confidence > 0.8) { // Higher threshold for MS-ASL
+    if (matchedGesture && confidence > confThreshold) {
       return {
         gesture: matchedGesture,
         confidence
@@ -369,20 +390,27 @@ function detectExtendedFingers(landmarks: number[][]): boolean[] {
     // Critical for detecting curved fingers in letters like 'C', 'O'
     const angle = angleBetweenThreePoints(baseKnuckle, midKnuckle, tip);
     
-    // Different extension thresholds for different fingers (ASL-specific)
-    let extensionThreshold = 1.5;
-    let angleThreshold = 140;
+    // STRICTER extension thresholds for different fingers (MS-ASL specifically tuned)
+    // More rigid detection especially for MS-ASL dataset
+    let extensionThreshold = 1.7; // Higher ratio threshold = more extended
+    let angleThreshold = 150;    // Higher angle threshold = straighter fingers
     
     // Special case: index finger (i=1) is often used in signs like 'D', 'G', 'Z'
     if (i === 1) {
-      extensionThreshold = 1.2; // Lower threshold for index finger
-      angleThreshold = 130;     // More permissive angle for index finger
+      extensionThreshold = 1.4; // Still higher than before but recognizes index pointing
+      angleThreshold = 140;     // Straighter for MS-ASL index pointing
+    }
+    
+    // Special case: middle finger (i=2) for signs where it's important
+    if (i === 2) {
+      extensionThreshold = 1.5; // Calibrated specifically for MS-ASL
+      angleThreshold = 145;     // Slightly more forgiving than index
     }
     
     // Special case: pinky (i=4) for signs like 'I', 'Y'
     if (i === 4) {
-      extensionThreshold = 1.3;
-      angleThreshold = 120;     // Pinky doesn't need to be as straight
+      extensionThreshold = 1.5; // Higher than before
+      angleThreshold = 130;     // Still a bit forgiving as pinky is harder to extend
     }
     
     const isExtendedByDistance = extensionRatio > extensionThreshold;
@@ -561,15 +589,38 @@ function getFingerprintMatches(fingersExtended: boolean[], availableGestures: Ge
       const weights = [1.0, 1.3, 1.0, 0.8, 0.9]; // [thumb, index, middle, ring, pinky]
       const totalWeight = weights.reduce((sum, w) => sum + w, 0);
       
-      // Calculate weighted matching score
+      // Calculate weighted matching score with improved MS-ASL specific logic
       for (let i = 0; i < 5; i++) {
+        // Exact matches get full weight
         if (fingersExtended[i] === pattern[i]) {
           weightedScore += weights[i];
+        } else {
+          // Penalty is higher when the pattern has crucial differences
+          // Missing an extended finger is worse than having an extra extended finger
+          // This makes a big difference in MS-ASL accuracy for similar gestures
+          
+          if (pattern[i] === true && fingersExtended[i] === false) {
+            // Should be extended but isn't - heavy penalty for MS-ASL
+            weightedScore -= weights[i] * 1.2; // Higher penalty for missing extended fingers
+          } else {
+            // Should be closed but is extended - moderate penalty
+            weightedScore -= weights[i] * 0.8;
+          }
         }
       }
       
-      // Calculate confidence score
-      let confidence = weightedScore / totalWeight;
+      // Calculate confidence score and handle negative values
+      // With our new penalty system, scores can go negative for very poor matches
+      // We need to clamp these to a small positive value
+      let confidence = 0.0;
+      
+      if (weightedScore <= 0) {
+        // Very poor match - give it a very low confidence
+        confidence = 0.1;
+      } else {
+        // Normal case - calculate standard confidence
+        confidence = Math.min(1.0, weightedScore / totalWeight);
+      }
       
       // MS-ASL specific adjustments:
       // 1. Adjust confidence based on gesture type

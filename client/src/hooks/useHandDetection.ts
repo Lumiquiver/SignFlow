@@ -33,8 +33,8 @@ export function useHandDetection({
   const handposeModelRef = useRef<any>(null);
   
   // MS-ASL confidence tracking (for requiring multiple high-confidence detections)
-  const confidenceHistoryRef = useRef<Map<string, { count: number, confidences: number[] }>>(new Map());
-  const REQUIRED_MATCHES = 2; // Number of high-confidence matches needed for a confirmation
+  const confidenceHistoryRef = useRef<Map<string, { count: number, confidences: number[], lastTimestamp: number }>>(new Map());
+  const REQUIRED_MATCHES = 4; // Increased number of high-confidence matches needed for a confirmation (more strict)
   
   // Load the handpose model when component mounts
   useEffect(() => {
@@ -73,8 +73,11 @@ export function useHandDetection({
       
       // Clear old gesture matches to prevent stale data
       confidenceHistoryRef.current.forEach((value, key) => {
-        // Reset counts for gestures not seen recently
-        confidenceHistoryRef.current.set(key, { count: 0, confidences: [] });
+        const now = Date.now();
+        // If data is stale (not seen in 5 seconds), reset it completely
+        if (now - value.lastTimestamp > expiration) {
+          confidenceHistoryRef.current.set(key, { count: 0, confidences: [], lastTimestamp: now });
+        }
       });
     }, 10000); // Cleanup every 10 seconds
     
@@ -129,10 +132,23 @@ export function useHandDetection({
                 if (recognitionResult && recognitionResult.confidence > 0.8) { // Higher threshold for MS-ASL
                   const gestureName = recognitionResult.gesture.name;
                   
-                  // Update confidence history for this gesture
-                  const history = confidenceHistoryRef.current.get(gestureName) || { count: 0, confidences: [] };
+                  // Update confidence history for this gesture with timestamp tracking
+                  const now = Date.now();
+                  const history = confidenceHistoryRef.current.get(gestureName) || { 
+                    count: 0, 
+                    confidences: [],
+                    lastTimestamp: now
+                  };
+                  
+                  // Reset count if too much time has passed (3 seconds)
+                  if (now - history.lastTimestamp > 3000) {
+                    history.count = 0;
+                    history.confidences = [];
+                  }
+                  
                   history.count++;
                   history.confidences.push(recognitionResult.confidence);
+                  history.lastTimestamp = now;
                   confidenceHistoryRef.current.set(gestureName, history);
                   
                   // For MS-ASL signs, require multiple consistent detections before reporting
@@ -150,7 +166,7 @@ export function useHandDetection({
                       detectionCountRef.current = 0;
                       
                       // Clear the history count to prevent repeated triggers
-                      confidenceHistoryRef.current.set(gestureName, { count: 0, confidences: [] });
+                      confidenceHistoryRef.current.set(gestureName, { count: 0, confidences: [], lastTimestamp: Date.now() });
                       
                       // Notify with the MS-ASL optimized gesture information
                       onGestureDetected?.({

@@ -34,7 +34,8 @@ export function useHandDetection({
   
   // MS-ASL confidence tracking (for requiring multiple high-confidence detections)
   const confidenceHistoryRef = useRef<Map<string, { count: number, confidences: number[], lastTimestamp: number }>>(new Map());
-  const REQUIRED_MATCHES = 4; // Increased number of high-confidence matches needed for a confirmation (more strict)
+  const REQUIRED_MATCHES = 2; // CRITICAL CHANGE: We reduced this from 4 to 2 to allow faster recognition
+  // This should make the app much more responsive as most signs will now work with just 2 matches
   
   // Load the handpose model when component mounts
   useEffect(() => {
@@ -128,8 +129,8 @@ export function useHandDetection({
                 const landmarks = predictions[0].landmarks;
                 const recognitionResult = await recognizeGesture(landmarks, availableGestures);
                 
-                // Process only high confidence MS-ASL matches
-                if (recognitionResult && recognitionResult.confidence > 0.8) { // Higher threshold for MS-ASL
+                // CRITICAL CHANGE: Lowered initial confidence filter to get more signs
+                if (recognitionResult && recognitionResult.confidence > 0.6) { // Much lower from 0.8
                   const gestureName = recognitionResult.gesture.name;
                   
                   // Update confidence history for this gesture with timestamp tracking

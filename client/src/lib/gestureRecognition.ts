@@ -646,11 +646,11 @@ function getFingerprintMatches(fingersExtended: boolean[], availableGestures: Ge
       // More stringent thresholds to reduce false positives
       let minConfidence = 0.8; // Default high threshold
       
-      // Different thresholds based on gesture type and complexity
+      // CRITICAL CHANGE: Made thresholds much lower for better recognition
       if (result.gesture.type === 'alphabet') {
-        minConfidence = 0.85; // Even higher for alphabet signs
+        minConfidence = 0.65; // Was 0.85, now much lower to allow better recognition
       } else if (result.gesture.type === 'phrase') {
-        minConfidence = 0.80; // High for phrases
+        minConfidence = 0.60; // Was 0.80, now much lower for phrases
       }
       
       // Adjust threshold based on complexity if available

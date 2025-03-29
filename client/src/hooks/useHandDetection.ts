@@ -65,21 +65,21 @@ export function useHandDetection({
     };
   }, []);
   
-  // Cleanup confidence history periodically
+  // Add a much less aggressive cleanup that only removes truly stale data
   useEffect(() => {
     const cleanupInterval = setInterval(() => {
       const now = Date.now();
-      const expiration = 5000; // 5 seconds
+      const expiration = 8000; // 8 seconds - much longer than before
       
-      // Clear old gesture matches to prevent stale data
+      // Only clear very old gesture matches that haven't been seen in a long time
+      // Don't reset active ones like before!
       confidenceHistoryRef.current.forEach((value, key) => {
-        const now = Date.now();
-        // If data is stale (not seen in 5 seconds), reset it completely
+        // If data is extremely stale (not seen in 8+ seconds), reset it
         if (now - value.lastTimestamp > expiration) {
-          confidenceHistoryRef.current.set(key, { count: 0, confidences: [], lastTimestamp: now });
+          confidenceHistoryRef.current.delete(key); // Just remove it completely instead of resetting
         }
       });
-    }, 10000); // Cleanup every 10 seconds
+    }, 15000); // Cleanup less frequently (every 15 seconds instead of 10)
     
     return () => {
       clearInterval(cleanupInterval);
@@ -151,6 +151,9 @@ export function useHandDetection({
                   history.lastTimestamp = now;
                   confidenceHistoryRef.current.set(gestureName, history);
                   
+                  // For debugging - track the confidence history count
+                  console.log(`Confidence count for ${gestureName}: ${history.count}/${REQUIRED_MATCHES} (need ${REQUIRED_MATCHES})`);
+                  
                   // For MS-ASL signs, require multiple consistent detections before reporting
                   // This helps filter out false positives in complex signs
                   if (history.count >= REQUIRED_MATCHES) {
@@ -165,8 +168,14 @@ export function useHandDetection({
                       lastDetectedGestureRef.current = gestureName;
                       detectionCountRef.current = 0;
                       
-                      // Clear the history count to prevent repeated triggers
-                      confidenceHistoryRef.current.set(gestureName, { count: 0, confidences: [], lastTimestamp: Date.now() });
+                      // CRITICAL FIX: Don't reset the history count completely to zero!
+                      // Instead, reduce it to maintain more consistency between detections
+                      // This allows the system to quickly re-recognize the same sign
+                      confidenceHistoryRef.current.set(gestureName, { 
+                        count: REQUIRED_MATCHES - 1, // Keep most of our confidence history instead of resetting to 0
+                        confidences: history.confidences.slice(-3), // Keep the last 3 confidence measurements
+                        lastTimestamp: Date.now() 
+                      });
                       
                       // Notify with the MS-ASL optimized gesture information
                       onGestureDetected?.({

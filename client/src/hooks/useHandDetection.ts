@@ -26,10 +26,15 @@ export function useHandDetection({
   const [isModelReady, setIsModelReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // Enhanced tracking for MS-ASL specific detection improvements
   const detectionLoopRef = useRef<number | null>(null);
   const lastDetectedGestureRef = useRef<string | null>(null);
   const detectionCountRef = useRef<number>(0);
   const handposeModelRef = useRef<any>(null);
+  
+  // MS-ASL confidence tracking (for requiring multiple high-confidence detections)
+  const confidenceHistoryRef = useRef<Map<string, { count: number, confidences: number[] }>>(new Map());
+  const REQUIRED_MATCHES = 2; // Number of high-confidence matches needed for a confirmation
   
   // Load the handpose model when component mounts
   useEffect(() => {
@@ -60,7 +65,25 @@ export function useHandDetection({
     };
   }, []);
   
-  // Detection loop
+  // Cleanup confidence history periodically
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const expiration = 5000; // 5 seconds
+      
+      // Clear old gesture matches to prevent stale data
+      confidenceHistoryRef.current.forEach((value, key) => {
+        // Reset counts for gestures not seen recently
+        confidenceHistoryRef.current.set(key, { count: 0, confidences: [] });
+      });
+    }, 10000); // Cleanup every 10 seconds
+    
+    return () => {
+      clearInterval(cleanupInterval);
+    };
+  }, []);
+  
+  // MS-ASL enhanced detection loop
   useEffect(() => {
     if (!enabled || !isModelReady || !videoRef.current) {
       if (detectionLoopRef.current) {
@@ -93,7 +116,7 @@ export function useHandDetection({
               detectionStatus: 'recognized'
             }));
             
-            // Use the already loaded model instance for gesture recognition
+            // Use the already loaded model instance for MS-ASL gesture recognition
             const model = getHandposeModel();
             if (model) {
               const predictions = await model.estimateHands(video);
@@ -102,23 +125,45 @@ export function useHandDetection({
                 const landmarks = predictions[0].landmarks;
                 const recognitionResult = await recognizeGesture(landmarks, availableGestures);
                 
-                if (recognitionResult && recognitionResult.confidence > 0.7) {
-                  // Only notify if it's a different gesture or repeated after threshold
-                  // This prevents rapid-fire identical detections
-                  if (
-                    lastDetectedGestureRef.current !== recognitionResult.gesture.name ||
-                    detectionCountRef.current > 5 // Reduced threshold
-                  ) {
-                    lastDetectedGestureRef.current = recognitionResult.gesture.name;
-                    detectionCountRef.current = 0;
+                // Process only high confidence MS-ASL matches
+                if (recognitionResult && recognitionResult.confidence > 0.8) { // Higher threshold for MS-ASL
+                  const gestureName = recognitionResult.gesture.name;
+                  
+                  // Update confidence history for this gesture
+                  const history = confidenceHistoryRef.current.get(gestureName) || { count: 0, confidences: [] };
+                  history.count++;
+                  history.confidences.push(recognitionResult.confidence);
+                  confidenceHistoryRef.current.set(gestureName, history);
+                  
+                  // For MS-ASL signs, require multiple consistent detections before reporting
+                  // This helps filter out false positives in complex signs
+                  if (history.count >= REQUIRED_MATCHES) {
+                    // Calculate average confidence for stability
+                    const avgConfidence = history.confidences.reduce((a, b) => a + b, 0) / history.confidences.length;
                     
-                    onGestureDetected?.({
-                      gesture: recognitionResult.gesture.name,
-                      confidence: recognitionResult.confidence,
-                      timestamp: Date.now()
-                    });
-                  } else {
-                    detectionCountRef.current++;
+                    // Apply a cooldown to prevent too frequent detections of the same sign
+                    if (
+                      lastDetectedGestureRef.current !== gestureName ||
+                      detectionCountRef.current > 3 // Lower threshold for MS-ASL to allow faster detection
+                    ) {
+                      lastDetectedGestureRef.current = gestureName;
+                      detectionCountRef.current = 0;
+                      
+                      // Clear the history count to prevent repeated triggers
+                      confidenceHistoryRef.current.set(gestureName, { count: 0, confidences: [] });
+                      
+                      // Notify with the MS-ASL optimized gesture information
+                      onGestureDetected?.({
+                        gesture: gestureName,
+                        confidence: avgConfidence,
+                        timestamp: Date.now()
+                      });
+                      
+                      // For debugging
+                      console.log(`MS-ASL detected: ${gestureName} with avg confidence ${(avgConfidence * 100).toFixed(1)}%`);
+                    } else {
+                      detectionCountRef.current++;
+                    }
                   }
                 }
               }
@@ -129,11 +174,12 @@ export function useHandDetection({
               ...handState
             }));
             
+            // Reset tracking when no hands are detected
             lastDetectedGestureRef.current = null;
             detectionCountRef.current = 0;
           }
         } catch (err) {
-          console.error("Error in detection loop:", err);
+          console.error("Error in MS-ASL detection loop:", err);
           setDetectionState(prev => ({
             ...prev,
             isDetecting: false,

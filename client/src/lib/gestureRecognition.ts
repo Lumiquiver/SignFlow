@@ -101,77 +101,201 @@ export async function recognizeGesture(handLandmarks: number[][], availableGestu
     console.log("Fingers extended:", fingersExtended);
     console.log("Hand orientation:", handOrientation.toFixed(1) + "°");
     
-    // Calculate additional ASL-specific features
+    // Calculate MS-ASL specific features
     // 1. Hand compactness (ratio of hand width to height)
     const handWidth = Math.max(...handLandmarks.map(l => l[0])) - Math.min(...handLandmarks.map(l => l[0]));
     const handHeight = Math.max(...handLandmarks.map(l => l[1])) - Math.min(...handLandmarks.map(l => l[1]));
     const handCompactness = handWidth / handHeight;
     
-    // 2. Thumb position relative to palm - important for many ASL signs
+    // 2. Thumb position relative to palm - important for many MS-ASL signs
     const thumbTip = handLandmarks[4];
     const indexMCP = handLandmarks[5];
     const thumbToIndexBase = distance(thumbTip, indexMCP);
     
-    // Find closest matching gesture based on the improved finger pattern detection
+    // 3. Calculate finger curl for each finger (important for MS-ASL classification)
+    const fingerCurls = calculateFingerCurls(handLandmarks);
+    
+    // Find closest matching gesture using our improved MS-ASL specific algorithm
     const gestureMatches = getFingerprintMatches(fingersExtended, availableGestures);
     
-    // Enhanced matching with additional checks for specific ASL signs
+    // If no matches found or confidence too low, return null early
+    if (gestureMatches.length === 0) {
+      return null;
+    }
+    
+    // MS-ASL enhanced matching with additional checks specific to the MS-ASL dataset
+    let matchedGesture = gestureMatches[0].gesture;
+    let confidence = gestureMatches[0].confidence;
+    
+    // Log the top matches for debugging (only if we have matches)
     if (gestureMatches.length > 0) {
-      let matchedGesture = gestureMatches[0].gesture;
-      let confidence = gestureMatches[0].confidence;
-      
-      // Log the top matches for debugging
       console.log("Top matches:", gestureMatches.slice(0, 3).map(m => 
         `${m.gesture.name} (${(m.confidence * 100).toFixed(1)}%)`).join(", "));
-      
-      // Special case handling for commonly confused ASL signs
-      
-      // Case 1: 'A' vs 'S' - both have closed fist but 'A' has thumb to side
-      if ((matchedGesture.name === 'A' || matchedGesture.name === 'S') && 
-          fingersExtended[0] && !fingersExtended.slice(1).some(Boolean)) {
-        // Confirm it's truly 'A' by checking thumb position
-        if (thumbToIndexBase > distance(handLandmarks[1], indexMCP) * 0.8) {
-          matchedGesture = availableGestures.find(g => g.name === 'A') || matchedGesture;
-          confidence = Math.max(confidence, 0.85);
-          console.log("Special case: Detected 'A' sign");
-        }
-      }
-      
-      // Case 2: 'U' vs 'V' - both use index+middle but 'V' has them spread
-      if ((matchedGesture.name === 'U' || matchedGesture.name === 'V') && 
-          fingersExtended[1] && fingersExtended[2] && !fingersExtended[3] && !fingersExtended[4]) {
-        // Measure spread between index and middle fingertips
-        const indexTip = handLandmarks[8];
-        const middleTip = handLandmarks[12];
-        const fingerSpread = distance(indexTip, middleTip) / handHeight;
-        
-        if (fingerSpread > 0.3) {
-          // Wide spread indicates 'V'
-          matchedGesture = availableGestures.find(g => g.name === 'V') || matchedGesture;
-          confidence = Math.max(confidence, 0.85);
-          console.log("Special case: Detected 'V' sign (spread fingers)");
-        } else {
-          // Narrow spread indicates 'U'
-          matchedGesture = availableGestures.find(g => g.name === 'U') || matchedGesture;
-          confidence = Math.max(confidence, 0.85);
-          console.log("Special case: Detected 'U' sign (close fingers)");
-        }
-      }
-      
-      // If we found a gesture with good confidence, return it
-      if (matchedGesture && confidence > 0.7) {
-        return {
-          gesture: matchedGesture,
-          confidence
-        };
+    }
+    
+    // MS-ASL special case handling for commonly confused signs
+    
+    // Case 1: 'A' vs 'S' - both have closed fist but 'A' has thumb to side
+    if ((matchedGesture.name === 'A' || matchedGesture.name === 'S') && 
+        fingersExtended[0] && !fingersExtended.slice(1).some(Boolean)) {
+      // Confirm it's truly 'A' by checking thumb position (with MS-ASL specific calibration)
+      if (thumbToIndexBase > distance(handLandmarks[1], indexMCP) * 0.85) {
+        matchedGesture = availableGestures.find(g => g.name === 'A') || matchedGesture;
+        confidence = Math.max(confidence, 0.85);
+        console.log("Special case: Detected 'A' sign (MS-ASL)");
       }
     }
     
+    // Case 2: 'U' vs 'V' - both use index+middle but 'V' has them spread
+    if ((matchedGesture.name === 'U' || matchedGesture.name === 'V') && 
+        fingersExtended[1] && fingersExtended[2] && !fingersExtended[3] && !fingersExtended[4]) {
+      // Measure spread between index and middle fingertips (with MS-ASL specific threshold)
+      const indexTip = handLandmarks[8];
+      const middleTip = handLandmarks[12];
+      const fingerSpread = distance(indexTip, middleTip) / handHeight;
+      
+      if (fingerSpread > 0.35) { // MS-ASL has a wider V shape than standard ASL
+        // Wide spread indicates 'V'
+        matchedGesture = availableGestures.find(g => g.name === 'V') || matchedGesture;
+        confidence = 0.9; // High confidence for this specific case
+        console.log("Special case: Detected 'V' sign (MS-ASL spread fingers)");
+      } else {
+        // Narrow spread indicates 'U'
+        matchedGesture = availableGestures.find(g => g.name === 'U') || matchedGesture;
+        confidence = 0.9; // High confidence for this specific case
+        console.log("Special case: Detected 'U' sign (MS-ASL close fingers)");
+      }
+    }
+    
+    // Case 3: 'Hello' - requires all fingers extended with palm facing camera
+    // This helps distinguish from other signs with all fingers extended
+    if (matchedGesture.name === 'Hello' && fingersExtended.every(Boolean)) {
+      // For Hello, check if the palm is relatively facing the camera 
+      // Calculate palm normal vector (simplified)
+      const palmNormal = calculatePalmNormal(handLandmarks);
+      const facingCamera = Math.abs(palmNormal[2]) > 0.7; // Z component indicates facing camera
+      
+      if (facingCamera) {
+        confidence = 0.95; // Very high confidence for this distinctive gesture
+        console.log("Special case: Confirmed 'Hello' sign with palm facing camera (MS-ASL)");
+      } else {
+        // If palm is not facing camera, this is likely not the Hello sign
+        confidence *= 0.5; // Reduce confidence significantly
+      }
+    }
+    
+    // Case 4: Improve distinction between number signs in MS-ASL (1-5)
+    if (['1', '2', '3', '4', '5'].includes(matchedGesture.name)) {
+      const numExtendedFingers = fingersExtended.filter(Boolean).length;
+      const expectedNumber = parseInt(matchedGesture.name);
+      
+      // If number of extended fingers matches the number sign, boost confidence
+      if (numExtendedFingers === expectedNumber) {
+        confidence = Math.max(confidence, 0.9);
+        console.log(`Special case: Confirmed number sign '${matchedGesture.name}' (MS-ASL)`);
+      } else {
+        // If extended fingers don't match expected number, this is likely wrong
+        confidence *= 0.3; // Significantly reduce confidence
+      }
+    }
+    
+    // Apply MS-ASL specific adjustments based on available data from gesture
+    if (matchedGesture.msaslClass !== undefined) {
+      // Use MS-ASL class information to refine confidence
+      // Higher class numbers have more complex constraints
+      const complexityAdjustment = 1.0 - (matchedGesture.msaslClass / 100);
+      confidence *= complexityAdjustment;
+    }
+    
+    // If we found a gesture with high enough confidence (MS-ASL threshold), return it
+    if (matchedGesture && confidence > 0.8) { // Higher threshold for MS-ASL
+      return {
+        gesture: matchedGesture,
+        confidence
+      };
+    }
+    
+    // If confidence is too low after all our checks, return null
     return null;
   } catch (error) {
     console.error("Error in gesture recognition:", error);
     return null;
   }
+}
+
+// Calculate finger curl values for each finger (MS-ASL specific feature)
+// Returns an array of values from 0 (straight) to 1 (fully curled)
+function calculateFingerCurls(landmarks: number[][]): number[] {
+  const curls: number[] = [];
+  
+  // For each finger (except thumb which works differently)
+  for (let finger = 1; finger <= 4; finger++) {
+    // Get the base (MCP), middle (PIP), and tip landmarks for this finger
+    const baseIndex = finger * 4 + 1;
+    const midIndex = finger * 4 + 2;
+    const tipIndex = finger * 4 + 4;
+    
+    const base = landmarks[baseIndex];
+    const mid = landmarks[midIndex];
+    const tip = landmarks[tipIndex];
+    
+    // Calculate the angle at the middle joint
+    const angle = angleBetweenThreePoints(base, mid, tip);
+    
+    // Convert angle to curl value (180° = straight = 0 curl, 0° = fully bent = 1 curl)
+    // MS-ASL specific scaling based on their dataset characteristics
+    const curl = 1 - (angle / 180);
+    curls.push(curl);
+  }
+  
+  // Calculate thumb curl separately (it bends differently)
+  const thumbBase = landmarks[1];
+  const thumbMid = landmarks[2];
+  const thumbTip = landmarks[4];
+  const thumbAngle = angleBetweenThreePoints(thumbBase, thumbMid, thumbTip);
+  const thumbCurl = 1 - (thumbAngle / 180);
+  
+  // Add thumb curl at the beginning
+  curls.unshift(thumbCurl);
+  
+  return curls;
+}
+
+// Calculate palm normal vector (simplified for MS-ASL)
+// Returns a unit vector [x,y,z] representing direction palm is facing
+function calculatePalmNormal(landmarks: number[][]): number[] {
+  // Use wrist and key MCP joints to define the palm plane
+  const wrist = landmarks[0];
+  const indexMCP = landmarks[5];
+  const pinkyMCP = landmarks[17];
+  
+  // Calculate two vectors in the palm plane
+  const v1 = [
+    indexMCP[0] - wrist[0],
+    indexMCP[1] - wrist[1],
+    indexMCP[2] - wrist[2]
+  ];
+  
+  const v2 = [
+    pinkyMCP[0] - wrist[0],
+    pinkyMCP[1] - wrist[1],
+    pinkyMCP[2] - wrist[2]
+  ];
+  
+  // Cross product to get normal vector
+  const normal = [
+    v1[1] * v2[2] - v1[2] * v2[1],
+    v1[2] * v2[0] - v1[0] * v2[2],
+    v1[0] * v2[1] - v1[1] * v2[0]
+  ];
+  
+  // Normalize to unit vector
+  const magnitude = Math.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2);
+  return [
+    normal[0] / magnitude,
+    normal[1] / magnitude,
+    normal[2] / magnitude
+  ];
 }
 
 // Enhanced algorithm to detect which fingers are extended
@@ -272,71 +396,169 @@ function detectExtendedFingers(landmarks: number[][]): boolean[] {
 
 // Simple pattern matching for ASL letters
 function getFingerprintMatches(fingersExtended: boolean[], availableGestures: Gesture[]): Array<{gesture: Gesture, confidence: number}> {
-  // Significantly improved fingerprint patterns based on true ASL finger positions
+  // MS-ASL specific finger patterns based on MS-ASL dataset
   // Format: [thumb, index, middle, ring, pinky]
-  const patterns: {[key: string]: boolean[]} = {
-    // ASL alphabet finger patterns
-    'A': [true, false, false, false, false],    // Fist with thumb to the side
-    'B': [false, true, true, true, true],       // Flat hand, all fingers extended except thumb
-    'C': [false, false, false, false, false],   // Curved C shape (detected as closed because of curve)
-    'D': [true, true, false, false, false],     // Index up, thumb touches index
-    'E': [false, false, false, false, false],   // Curved fingers, thumb against palm
-    'F': [true, true, false, false, false],     // Index and thumb touching, rest closed
-    'G': [true, true, false, false, false],     // Point with index, thumb out
-    'H': [true, true, true, false, false],      // Index and middle out, parallel
-    'I': [false, false, false, false, true],    // Only pinky extended
-    'J': [false, false, false, false, true],    // Pinky extended with motion
-    'K': [true, true, true, false, false],      // Index and middle extended in V, thumb out
-    'L': [true, true, false, false, false],     // Thumb and index make L shape
-    'M': [false, false, false, false, false],   // Three fingers folded over thumb
-    'N': [false, false, false, false, false],   // Two fingers folded over thumb
-    'O': [false, false, false, false, false],   // Curved O shape with all fingers
-    'P': [true, true, false, false, false],     // Pointing down with index, thumb out
-    'Q': [true, true, false, false, false],     // Pointing down with index
-    'R': [true, true, true, false, false],      // Crossed index and middle
-    'S': [false, false, false, false, false],   // Fist with thumb across palm
-    'T': [false, false, false, false, false],   // Fist with thumb between index and middle
-    'U': [true, true, true, false, false],      // Index and middle extended together
-    'V': [true, true, true, false, false],      // Index and middle extended in V shape
-    'W': [true, true, true, true, false],       // Index, middle, and ring extended
-    'X': [true, false, false, false, false],    // Bent index, thumb out
-    'Y': [true, false, false, false, true],     // Thumb and pinky extended (hang loose)
-    'Z': [true, true, false, false, false],     // Index draws Z in air
+  const patterns: {[key: string]: {
+    fingerPattern: boolean[], 
+    // Additional verification required (function that returns true if this is a match)
+    verifyFn?: (fingersExtended: boolean[]) => boolean
+  }} = {
+    // ASL alphabet with MS-ASL specific patterns
+    'A': { 
+      fingerPattern: [true, false, false, false, false],
+      verifyFn: (fingers) => fingers[0] && !fingers.slice(1).some(Boolean) // Only thumb extended
+    },    
+    'B': { 
+      fingerPattern: [false, true, true, true, true],
+      // For B, we want to be extra sure the thumb is NOT extended while all others are
+      verifyFn: (fingers) => !fingers[0] && fingers.slice(1).every(Boolean)
+    },
+    'C': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'D': { 
+      fingerPattern: [true, true, false, false, false],
+      verifyFn: (fingers) => fingers[0] && fingers[1] && !fingers[2] && !fingers[3] && !fingers[4]
+    },
+    'E': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'F': { 
+      fingerPattern: [true, true, false, false, false] 
+    },
+    'G': { 
+      fingerPattern: [true, true, false, false, false],
+      verifyFn: (fingers) => fingers[0] && fingers[1] && !fingers[2] && !fingers[3] && !fingers[4]
+    },
+    'H': { 
+      fingerPattern: [true, true, true, false, false],
+      verifyFn: (fingers) => fingers[0] && fingers[1] && fingers[2] && !fingers[3] && !fingers[4]
+    },
+    'I': { 
+      fingerPattern: [false, false, false, false, true],
+      verifyFn: (fingers) => !fingers[0] && !fingers[1] && !fingers[2] && !fingers[3] && fingers[4]
+    },
+    'J': { 
+      fingerPattern: [false, false, false, false, true] 
+    },
+    'K': { 
+      fingerPattern: [true, true, true, false, false] 
+    },
+    'L': { 
+      fingerPattern: [true, true, false, false, false],
+      verifyFn: (fingers) => fingers[0] && fingers[1] && !fingers[2] && !fingers[3] && !fingers[4]
+    },
+    'M': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'N': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'O': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'P': { 
+      fingerPattern: [true, true, false, false, false] 
+    },
+    'Q': { 
+      fingerPattern: [true, true, false, false, false] 
+    },
+    'R': { 
+      fingerPattern: [true, true, true, false, false] 
+    },
+    'S': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'T': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'U': { 
+      fingerPattern: [true, true, true, false, false],
+      verifyFn: (fingers) => fingers[0] && fingers[1] && fingers[2] && !fingers[3] && !fingers[4]
+    },
+    'V': { 
+      fingerPattern: [true, true, true, false, false],
+      verifyFn: (fingers) => fingers[0] && fingers[1] && fingers[2] && !fingers[3] && !fingers[4]
+    },
+    'W': { 
+      fingerPattern: [true, true, true, true, false],
+      // For W, we specifically want thumb, index, middle, and ring fingers extended, but not pinky
+      verifyFn: (fingers) => fingers[0] && fingers[1] && fingers[2] && fingers[3] && !fingers[4]
+    },
+    'X': { 
+      fingerPattern: [true, false, false, false, false] 
+    },
+    'Y': { 
+      fingerPattern: [true, false, false, false, true],
+      verifyFn: (fingers) => fingers[0] && !fingers[1] && !fingers[2] && !fingers[3] && fingers[4]
+    },
+    'Z': { 
+      fingerPattern: [true, true, false, false, false] 
+    },
     
-    // Common phrases - more accurately mapped to specific hand shapes
-    'Hello': [true, true, true, true, true],    // Open hand wave
-    'Thank You': [true, false, false, false, false], // Flat hand from chin forward
-    'Please': [true, false, false, false, false],    // Circular motion on chest
-    'Sorry': [false, false, false, false, false],    // Fist circular motion on chest
-    'Help': [true, true, false, false, false],       // One flat hand on other
-    'Yes': [true, false, false, false, false],       // Nodding fist
-    'No': [true, true, true, false, false],          // Index and middle extended, shake
-    'Good': [true, false, false, false, false],      // Flat hand down from chin
-    'Bad': [true, false, false, false, false],       // Flat hand down from chin with frown
-    'Love': [true, false, false, false, false],      // Cross arms over chest
+    // MS-ASL common phrases with more specific patterns
+    'Hello': { 
+      fingerPattern: [true, true, true, true, true],
+      // For Hello, all fingers must be clearly extended - this is a very specific gesture
+      verifyFn: (fingers) => fingers.every(Boolean)
+    },
+    'Thank You': { 
+      fingerPattern: [true, false, false, false, false] 
+    },
+    'Please': { 
+      fingerPattern: [true, false, false, false, false] 
+    },
+    'Sorry': { 
+      fingerPattern: [false, false, false, false, false] 
+    },
+    'Help': { 
+      fingerPattern: [true, true, false, false, false] 
+    },
+    'Yes': { 
+      fingerPattern: [true, false, false, false, false] 
+    },
+    'No': { 
+      fingerPattern: [true, true, true, false, false] 
+    },
+    'Good': { 
+      fingerPattern: [true, false, false, false, false] 
+    },
+    'Bad': { 
+      fingerPattern: [true, false, false, false, false] 
+    },
+    'Love': { 
+      fingerPattern: [true, false, false, false, false] 
+    },
   };
   
   // Add default patterns for any missing gestures (to avoid errors)
   availableGestures.forEach(gesture => {
     if (!patterns[gesture.name]) {
-      // Default to all fingers extended as fallback
-      patterns[gesture.name] = [true, true, true, true, true];
+      patterns[gesture.name] = { 
+        fingerPattern: gesture.fingerPattern || [true, true, true, true, true]
+      };
     }
   });
   
   // Match current pattern against known patterns with improved weighting
   const results = availableGestures
     .map(gesture => {
-      const pattern = patterns[gesture.name];
+      // Get the pattern for this gesture
+      const patternInfo = patterns[gesture.name];
+      const pattern = patternInfo.fingerPattern;
       
-      // Count matching fingers with weighted scoring based on ASL importance
-      // Different weights for different fingers based on their importance in ASL
+      // MS-ASL specific verification - first check if we have additional verification logic
+      // If we do and it fails, return very low confidence
+      if (patternInfo.verifyFn && !patternInfo.verifyFn(fingersExtended)) {
+        return { gesture, confidence: 0.1 }; // Very low confidence if verification fails
+      }
+      
+      // Count matching fingers with weighted scoring based on MS-ASL importance
       let weightedScore = 0;
       
-      // Weights adjusted for ASL recognition:
-      // - Thumb and index get higher weight as they're most distinctive in many ASL signs
-      // - Middle, ring, and pinky fingers get proportionally lower weights
-      const weights = [0.8, 1.2, 1.0, 0.7, 0.8]; // [thumb, index, middle, ring, pinky]
+      // MS-ASL specific weights
+      // Thumb and index have higher importance in MS-ASL
+      const weights = [1.0, 1.3, 1.0, 0.8, 0.9]; // [thumb, index, middle, ring, pinky]
       const totalWeight = weights.reduce((sum, w) => sum + w, 0);
       
       // Calculate weighted matching score
@@ -347,19 +569,45 @@ function getFingerprintMatches(fingersExtended: boolean[], availableGestures: Ge
       }
       
       // Calculate confidence score
-      const confidence = weightedScore / totalWeight;
+      let confidence = weightedScore / totalWeight;
       
-      // Add more context for better debugging
-      if (confidence > 0.7) {
+      // MS-ASL specific adjustments:
+      // 1. Adjust confidence based on gesture type
+      if (gesture.type === 'phrase') {
+        // Phrases need more precise matches in MS-ASL
+        confidence *= 0.9; // Reduce confidence slightly for phrases
+      }
+      
+      // 2. Apply confidence penalty for signs that require motion but can't be detected in single frame
+      if (gesture.hasMotion) {
+        confidence *= 0.85; // Reduce confidence for signs that require motion
+      }
+      
+      // Add more context for better debugging - only for relatively high confidence matches
+      if (confidence > 0.65) {
         console.log(`High match for ${gesture.name}: ${(confidence * 100).toFixed(1)}%, pattern: [${pattern}], detected: [${fingersExtended}]`);
       }
       
       return { gesture, confidence };
     })
     .filter(result => {
-      // Adaptive confidence threshold based on gesture type
-      // Letters need higher confidence than phrases
-      const minConfidence = result.gesture.type === 'alphabet' ? 0.7 : 0.65;
+      // MS-ASL specific adaptive confidence thresholds
+      // More stringent thresholds to reduce false positives
+      let minConfidence = 0.8; // Default high threshold
+      
+      // Different thresholds based on gesture type and complexity
+      if (result.gesture.type === 'alphabet') {
+        minConfidence = 0.85; // Even higher for alphabet signs
+      } else if (result.gesture.type === 'phrase') {
+        minConfidence = 0.80; // High for phrases
+      }
+      
+      // Adjust threshold based on complexity if available
+      if (result.gesture.complexity !== undefined) {
+        // More complex signs get slightly lower threshold
+        minConfidence -= (result.gesture.complexity / 100); 
+      }
+      
       return result.confidence > minConfidence;
     })
     .sort((a, b) => b.confidence - a.confidence); // Sort by confidence

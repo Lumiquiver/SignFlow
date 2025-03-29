@@ -17,16 +17,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Get gestures by type (alphabet or phrase)
+  // Get gestures by type (alphabet, phrase, or word for MS-ASL)
   app.get("/api/gestures/type/:type", async (req, res) => {
     try {
       const { type } = req.params;
-      if (!type || (type !== "alphabet" && type !== "phrase")) {
-        return res.status(400).json({ message: "Invalid gesture type. Must be 'alphabet' or 'phrase'." });
+      if (!type || (type !== "alphabet" && type !== "phrase" && type !== "word")) {
+        return res.status(400).json({ message: "Invalid gesture type. Must be 'alphabet', 'phrase', or 'word'." });
       }
       
       const gestures = await storage.getGesturesByType(type);
       res.json(gestures);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // Get gestures by category (new for MS-ASL)
+  app.get("/api/gestures/category/:category", async (req, res) => {
+    try {
+      const { category } = req.params;
+      if (!category) {
+        return res.status(400).json({ message: "Category parameter is required" });
+      }
+      
+      // Get all gestures and filter by category (since we don't have direct storage method for this)
+      const allGestures = await storage.getAllGestures();
+      const filteredGestures = allGestures.filter(g => g.category === category);
+      
+      res.json(filteredGestures);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // Get gestures by motion capability (for MS-ASL)
+  app.get("/api/gestures/motion/:hasMotion", async (req, res) => {
+    try {
+      const hasMotion = req.params.hasMotion === 'true';
+      
+      // Get all gestures and filter by motion capability
+      const allGestures = await storage.getAllGestures();
+      const filteredGestures = allGestures.filter(g => g.hasMotion === hasMotion);
+      
+      res.json(filteredGestures);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // Get gestures by hands required (for MS-ASL)
+  app.get("/api/gestures/hands/:twoHanded", async (req, res) => {
+    try {
+      const isTwoHanded = req.params.twoHanded === 'true';
+      
+      // Get all gestures and filter by hands required
+      const allGestures = await storage.getAllGestures();
+      const filteredGestures = allGestures.filter(g => g.isTwoHanded === isTwoHanded);
+      
+      res.json(filteredGestures);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -65,6 +113,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       res.json(gesture);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // Get gestures by MS-ASL class ID
+  app.get("/api/gestures/msasl/:classId", async (req, res) => {
+    try {
+      const classId = parseInt(req.params.classId);
+      if (isNaN(classId)) {
+        return res.status(400).json({ message: "Invalid MS-ASL class ID" });
+      }
+      
+      // Get all gestures and filter by MS-ASL class ID
+      const allGestures = await storage.getAllGestures();
+      const filteredGestures = allGestures.filter(g => g.msaslClass === classId);
+      
+      if (filteredGestures.length === 0) {
+        return res.status(404).json({ message: "No gestures found with the specified MS-ASL class ID" });
+      }
+      
+      res.json(filteredGestures);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

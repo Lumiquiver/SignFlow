@@ -1,8 +1,18 @@
 export interface Gesture {
   id: number;
   name: string;
-  type: "alphabet" | "phrase";
+  type: "alphabet" | "phrase" | "word";
+  category?: string;
   description: string;
+  fingerPattern?: boolean[];
+  handShape?: string;
+  hasMotion?: boolean;
+  isTwoHanded?: boolean;
+  faceExpression?: string;
+  complexity?: number;
+  msaslClass?: number;
+  imageUrl?: string;
+  videoUrl?: string;
 }
 
 export interface DetectedGesture {

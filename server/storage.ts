@@ -105,7 +105,7 @@ export class PostgresStorage implements IStorage {
       const existingGestures = await this.getAllGestures();
       
       if (existingGestures.length === 0) {
-        console.log("Seeding database with initial ASL gestures...");
+        console.log("Seeding database with initial MS-ASL gestures...");
         await this.seedGestures();
       } else {
         console.log(`Database already contains ${existingGestures.length} gestures`);
@@ -115,120 +115,342 @@ export class PostgresStorage implements IStorage {
     }
   }
   
-  // Seed database with accurate ASL gestures
+  // Seed database with MS-ASL gestures
   private async seedGestures() {
-    // ASL alphabet with accurate finger patterns
+    // MS-ASL alphabet with accurate finger patterns
     const alphabetData: InsertGesture[] = [
       {
         name: 'A',
         type: 'alphabet',
+        category: 'basic',
         description: 'Fist with thumb at side',
         fingerPattern: [true, false, false, false, false],
         handShape: 'fist',
-        complexity: 1
+        hasMotion: false,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 1,
+        msaslClass: 1,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'B',
         type: 'alphabet',
+        category: 'basic',
         description: 'Flat hand with fingers together, thumb tucked',
         fingerPattern: [false, true, true, true, true],
         handShape: 'flat',
-        complexity: 1
+        hasMotion: false,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 1,
+        msaslClass: 2,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'C',
         type: 'alphabet',
+        category: 'basic',
         description: 'Curved hand in C shape',
         fingerPattern: [false, false, false, false, false],
         handShape: 'curved',
-        complexity: 2
+        hasMotion: false,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 3,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'D',
         type: 'alphabet',
+        category: 'basic',
         description: 'Index finger pointing up, other fingers curled, thumb against fingers',
         fingerPattern: [true, true, false, false, false],
         handShape: 'pointing',
-        complexity: 2
+        hasMotion: false,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 4,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'E',
         type: 'alphabet',
+        category: 'basic',
         description: 'Fingers curled, thumb across palm',
         fingerPattern: [false, false, false, false, false],
         handShape: 'curled',
-        complexity: 2
+        hasMotion: false,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 5,
+        imageUrl: null,
+        videoUrl: null
       }
     ];
     
-    // Just add a few to start
+    // Add the rest of the alphabet
     for (const letter of "FGHIJKLMNOPQRSTUVWXYZ".split("")) {
       alphabetData.push({
         name: letter,
         type: 'alphabet',
-        description: `ASL sign for letter ${letter}`,
-        fingerPattern: null, // Will be filled in later for accuracy
+        category: 'basic',
+        description: `MS-ASL sign for letter ${letter}`,
+        fingerPattern: null,
         handShape: 'unknown',
-        complexity: 2
+        hasMotion: false,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: alphabetData.length + 1,
+        imageUrl: null,
+        videoUrl: null
       });
     }
     
-    // Common phrases with more accurate patterns
+    // MS-ASL common phrases
     const phraseData: InsertGesture[] = [
       {
         name: 'Hello',
         type: 'phrase',
-        description: 'Open hand, palm facing out, fingers spread, move side to side',
+        category: 'greeting',
+        description: 'Wave hand near face, palm facing out',
         fingerPattern: [true, true, true, true, true],
         handShape: 'open',
-        complexity: 1
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: 'smile',
+        complexity: 1,
+        msaslClass: 100,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'Thank You',
         type: 'phrase',
-        description: 'Touch lips with fingertips then move hand outward',
+        category: 'courtesy',
+        description: 'Flat hand touching chin then moving outward',
         fingerPattern: [true, false, false, false, false],
         handShape: 'flat',
-        complexity: 2
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: 'smile',
+        complexity: 2,
+        msaslClass: 101,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'Please',
         type: 'phrase',
-        description: 'Circular motion on chest with flat hand',
+        category: 'courtesy',
+        description: 'Flat hand circling on chest',
         fingerPattern: [true, false, false, false, false],
         handShape: 'flat',
-        complexity: 2
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 102,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'Sorry',
         type: 'phrase',
-        description: 'Closed fist making circular motion on chest',
+        category: 'courtesy',
+        description: 'Fist circling on chest',
         fingerPattern: [false, false, false, false, false],
         handShape: 'fist',
-        complexity: 2
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: 'concerned',
+        complexity: 2,
+        msaslClass: 103,
+        imageUrl: null,
+        videoUrl: null
       },
       {
         name: 'Help',
         type: 'phrase',
-        description: 'Closed fist with thumb up, placed on open palm',
+        category: 'needs',
+        description: 'Fist on palm, moving upward together',
         fingerPattern: [true, true, false, false, false],
         handShape: 'mixed',
-        complexity: 3
+        hasMotion: true,
+        isTwoHanded: true,
+        faceExpression: 'concerned',
+        complexity: 3,
+        msaslClass: 104,
+        imageUrl: null,
+        videoUrl: null
       }
     ];
     
-    // Just add a few more basic phrases
-    const otherPhrases = ["Yes", "No", "Good", "Bad", "Love"];
-    for (const phrase of otherPhrases) {
-      phraseData.push({
-        name: phrase,
-        type: 'phrase',
-        description: `ASL sign for "${phrase}"`,
-        fingerPattern: null, // Will be filled in later
-        handShape: 'unknown',
-        complexity: 2
-      });
-    }
+    // Add more MS-ASL common words
+    const commonWords: InsertGesture[] = [
+      {
+        name: 'Yes',
+        type: 'word',
+        category: 'response',
+        description: 'Fist nodding up and down, like a head nod',
+        fingerPattern: [true, false, false, false, false],
+        handShape: 'fist',
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: 'affirmative',
+        complexity: 1,
+        msaslClass: 200,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'No',
+        type: 'word',
+        category: 'response',
+        description: 'Index and middle finger extended, hand pivoting at wrist',
+        fingerPattern: [true, true, true, false, false],
+        handShape: 'pointing',
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: 'negative',
+        complexity: 1,
+        msaslClass: 201,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'Good',
+        type: 'word',
+        category: 'descriptive',
+        description: 'Flat hand from mouth moving outward',
+        fingerPattern: [true, false, false, false, false],
+        handShape: 'flat',
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: 'positive',
+        complexity: 1,
+        msaslClass: 202,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'Bad',
+        type: 'word',
+        category: 'descriptive',
+        description: 'Flat hand from chin moving down and outward',
+        fingerPattern: [true, false, false, false, false],
+        handShape: 'flat',
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: 'negative',
+        complexity: 1,
+        msaslClass: 203,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'Love',
+        type: 'word',
+        category: 'emotional',
+        description: 'Cross arms over chest, hands in fists, touching opposite shoulders',
+        fingerPattern: [false, false, false, false, false],
+        handShape: 'fist',
+        hasMotion: false,
+        isTwoHanded: true,
+        faceExpression: 'warm',
+        complexity: 2,
+        msaslClass: 204,
+        imageUrl: null,
+        videoUrl: null
+      }
+    ];
+    
+    // MS-ASL specific words (more complex signs from the dataset)
+    const msaslSpecific: InsertGesture[] = [
+      {
+        name: 'Computer',
+        type: 'word',
+        category: 'technology',
+        description: 'Both hands typing motion, palms down',
+        fingerPattern: [true, true, true, true, true],
+        handShape: 'curved',
+        hasMotion: true,
+        isTwoHanded: true,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 300,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'School',
+        type: 'word',
+        category: 'education',
+        description: 'Clapping hands twice',
+        fingerPattern: [true, true, true, true, true],
+        handShape: 'flat',
+        hasMotion: true,
+        isTwoHanded: true,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 301,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'Work',
+        type: 'word',
+        category: 'activity',
+        description: 'Fists stacked and twisting',
+        fingerPattern: [false, false, false, false, false],
+        handShape: 'fist',
+        hasMotion: true,
+        isTwoHanded: true,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 302,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'Friend',
+        type: 'word',
+        category: 'relationship',
+        description: 'Index fingers hooked together, then reversed',
+        fingerPattern: [true, true, false, false, false],
+        handShape: 'pointing',
+        hasMotion: true,
+        isTwoHanded: true,
+        faceExpression: 'friendly',
+        complexity: 3,
+        msaslClass: 303,
+        imageUrl: null,
+        videoUrl: null
+      },
+      {
+        name: 'Family',
+        type: 'word',
+        category: 'relationship',
+        description: 'Both hands with fingers extended, circling each other',
+        fingerPattern: [true, true, true, true, true],
+        handShape: 'open',
+        hasMotion: true,
+        isTwoHanded: true,
+        faceExpression: 'warm',
+        complexity: 3,
+        msaslClass: 304,
+        imageUrl: null,
+        videoUrl: null
+      }
+    ];
     
     // Insert all the gestures
     console.log("Inserting alphabet gestures...");
@@ -241,7 +463,17 @@ export class PostgresStorage implements IStorage {
       await this.createGesture(gesture);
     }
     
-    console.log("Database seeding complete");
+    console.log("Inserting common word gestures...");
+    for (const gesture of commonWords) {
+      await this.createGesture(gesture);
+    }
+    
+    console.log("Inserting MS-ASL specific gestures...");
+    for (const gesture of msaslSpecific) {
+      await this.createGesture(gesture);
+    }
+    
+    console.log("Database seeding complete with MS-ASL data");
   }
 }
 
@@ -268,30 +500,181 @@ export class MemStorage implements IStorage {
   }
 
   private seedGestures() {
-    // The same data as PostgreSQL storage but in memory
+    // The same data as PostgreSQL storage but in memory - adapted for MS-ASL
     const alphabetGestures = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(letter => ({
       name: letter,
       type: "alphabet",
-      description: `ASL sign for letter ${letter}`,
+      category: "basic",
+      description: `MS-ASL sign for letter ${letter}`,
       fingerPattern: null,
       handShape: "unknown",
-      complexity: 1
+      hasMotion: false,
+      isTwoHanded: false,
+      faceExpression: null,
+      complexity: 1,
+      msaslClass: 0,
+      imageUrl: null,
+      videoUrl: null
     }));
     
     const phraseGestures = [
-      { name: "Hello", type: "phrase", description: "Wave hand near face", fingerPattern: [true, true, true, true, true], handShape: "open", complexity: 1 },
-      { name: "Thank You", type: "phrase", description: "Touch chin forward", fingerPattern: [true, false, false, false, false], handShape: "flat", complexity: 2 },
-      { name: "Please", type: "phrase", description: "Circular motion on chest", fingerPattern: [true, false, false, false, false], handShape: "flat", complexity: 2 },
-      { name: "Sorry", type: "phrase", description: "Fist circular on chest", fingerPattern: [false, false, false, false, false], handShape: "fist", complexity: 2 },
-      { name: "Help", type: "phrase", description: "Thumb up, palm out", fingerPattern: [true, true, false, false, false], handShape: "mixed", complexity: 3 },
-      { name: "Yes", type: "phrase", description: "Nodding fist", fingerPattern: [true, false, false, false, false], handShape: "fist", complexity: 1 },
-      { name: "No", type: "phrase", description: "Index and middle finger extended, moving side to side", fingerPattern: [true, true, true, false, false], handShape: "pointing", complexity: 2 },
-      { name: "Good", type: "phrase", description: "Flat hand from mouth forward", fingerPattern: [true, false, false, false, false], handShape: "flat", complexity: 1 },
-      { name: "Bad", type: "phrase", description: "Flat hand down from chin", fingerPattern: [true, false, false, false, false], handShape: "flat", complexity: 1 },
-      { name: "Love", type: "phrase", description: "Cross arms over chest", fingerPattern: [true, false, false, false, false], handShape: "crossed", complexity: 3 }
+      { 
+        name: "Hello", 
+        type: "phrase", 
+        category: "greeting",
+        description: "Wave hand near face", 
+        fingerPattern: [true, true, true, true, true], 
+        handShape: "open", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: "smile",
+        complexity: 1,
+        msaslClass: 100,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "Thank You", 
+        type: "phrase", 
+        category: "courtesy",
+        description: "Touch chin forward", 
+        fingerPattern: [true, false, false, false, false], 
+        handShape: "flat", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: "smile",
+        complexity: 2,
+        msaslClass: 101,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "Please", 
+        type: "phrase", 
+        category: "courtesy",
+        description: "Circular motion on chest", 
+        fingerPattern: [true, false, false, false, false], 
+        handShape: "flat", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: null,
+        complexity: 2,
+        msaslClass: 102,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "Sorry", 
+        type: "phrase", 
+        category: "courtesy",
+        description: "Fist circular on chest", 
+        fingerPattern: [false, false, false, false, false], 
+        handShape: "fist", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: "concerned",
+        complexity: 2,
+        msaslClass: 103,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "Help", 
+        type: "phrase", 
+        category: "needs",
+        description: "Thumb up, palm out", 
+        fingerPattern: [true, true, false, false, false], 
+        handShape: "mixed", 
+        hasMotion: true,
+        isTwoHanded: true,
+        faceExpression: "concerned",
+        complexity: 3,
+        msaslClass: 104,
+        imageUrl: null,
+        videoUrl: null
+      }
     ];
     
-    [...alphabetGestures, ...phraseGestures].forEach(g => {
+    // Add more words from MS-ASL dataset
+    const wordGestures = [
+      { 
+        name: "Yes", 
+        type: "word", 
+        category: "response",
+        description: "Nodding fist", 
+        fingerPattern: [true, false, false, false, false], 
+        handShape: "fist", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: "affirmative",
+        complexity: 1,
+        msaslClass: 200,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "No", 
+        type: "word", 
+        category: "response",
+        description: "Index and middle finger extended, moving side to side", 
+        fingerPattern: [true, true, true, false, false], 
+        handShape: "pointing", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: "negative",
+        complexity: 2,
+        msaslClass: 201,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "Good", 
+        type: "word", 
+        category: "descriptive",
+        description: "Flat hand from mouth forward", 
+        fingerPattern: [true, false, false, false, false], 
+        handShape: "flat", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: "positive",
+        complexity: 1,
+        msaslClass: 202,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "Bad", 
+        type: "word", 
+        category: "descriptive",
+        description: "Flat hand down from chin", 
+        fingerPattern: [true, false, false, false, false], 
+        handShape: "flat", 
+        hasMotion: true,
+        isTwoHanded: false,
+        faceExpression: "negative",
+        complexity: 1,
+        msaslClass: 203,
+        imageUrl: null,
+        videoUrl: null
+      },
+      { 
+        name: "Love", 
+        type: "word", 
+        category: "emotional",
+        description: "Cross arms over chest", 
+        fingerPattern: [true, false, false, false, false], 
+        handShape: "crossed", 
+        hasMotion: false,
+        isTwoHanded: true,
+        faceExpression: "warm",
+        complexity: 3,
+        msaslClass: 204,
+        imageUrl: null,
+        videoUrl: null
+      }
+    ];
+    
+    [...alphabetGestures, ...phraseGestures, ...wordGestures].forEach(g => {
       this.createGesture(g);
     });
   }
@@ -333,15 +716,21 @@ export class MemStorage implements IStorage {
   
   async createGesture(insertGesture: InsertGesture): Promise<Gesture> {
     const id = this.gestureCurrentId++;
-    // Ensure all required properties have values
+    // Ensure all required properties have values with proper defaults for MS-ASL schema
     const gesture: Gesture = { 
       ...insertGesture, 
       id,
+      category: insertGesture.category || null,
       description: insertGesture.description || null,
       fingerPattern: insertGesture.fingerPattern || null,
       handShape: insertGesture.handShape || null,
-      complexity: insertGesture.complexity || null,
-      imageUrl: null // Default value for imageUrl
+      hasMotion: insertGesture.hasMotion !== undefined ? insertGesture.hasMotion : false,
+      isTwoHanded: insertGesture.isTwoHanded !== undefined ? insertGesture.isTwoHanded : false,
+      faceExpression: insertGesture.faceExpression || null,
+      complexity: insertGesture.complexity || 1,
+      msaslClass: insertGesture.msaslClass || 0,
+      imageUrl: insertGesture.imageUrl || null,
+      videoUrl: insertGesture.videoUrl || null
     };
     this.gestures.set(id, gesture);
     return gesture;
@@ -353,12 +742,15 @@ export class MemStorage implements IStorage {
   
   async addGestureVariation(variation: InsertGestureVariation): Promise<GestureVariation> {
     const id = this.variationCurrentId++;
-    // Ensure all required properties have values
+    // Ensure all required properties have values for MS-ASL schema
     const newVariation: GestureVariation = { 
       ...variation, 
       id,
-      confidence: variation.confidence || null,
-      notes: variation.notes || null
+      fingerPattern: variation.fingerPattern, // This is required
+      gestureId: variation.gestureId, // This is required
+      confidence: variation.confidence || 0.8,
+      notes: variation.notes || null,
+      regionSpecific: variation.regionSpecific || null
     };
     
     if (!this.variations.has(variation.gestureId)) {

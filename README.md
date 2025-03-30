@@ -2,7 +2,7 @@
 
 SignFlow is a web-based application that translates American Sign Language (ASL) gestures into text in real-time using your webcam. The application leverages machine learning and computer vision to provide an accessible communication tool for both deaf and hearing individuals.
 
-![SignFlow Demo](https://github.com/lumiquiver/signflow/raw/main/assets/screenshot.png)
+![SignFlow Demo](https://raw.githubusercontent.com/Lumiquiver/SignFlow/refs/heads/main/42993bd2-d388-4d1b-b8da-945eb54b97af.jpg)
 
 ## Features
 

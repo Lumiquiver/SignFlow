@@ -2,7 +2,7 @@
 
 SignFlow is a web-based application that translates American Sign Language (ASL) gestures into text in real-time using your webcam. The application leverages machine learning and computer vision to provide an accessible communication tool for both deaf and hearing individuals.
 
-![SignFlow Demo](https://github.com/yourusername/signflow/raw/main/screenshot.png)
+![SignFlow Demo](https://github.com/lumiquiver/signflow/raw/main/assets/screenshot.png)
 
 ## Features
 
@@ -16,7 +16,7 @@ SignFlow is a web-based application that translates American Sign Language (ASL)
 
 ## Live Demo
 
-Try the live application at: [https://yourusername.github.io/signflow](https://yourusername.github.io/signflow)
+Try the live application at: [https://lumiquiver.github.io/signflow](https://lumiquiver.github.io/signflow)
 
 ## How It Works
 
@@ -31,13 +31,13 @@ The application features:
 ## Getting Started
 
 ### Online Use
-Simply visit [https://yourusername.github.io/signflow](https://yourusername.github.io/signflow) in any modern browser.
+Simply visit [https://lumiquiver.github.io/signflow](https://lumiquiver.github.io/signflow) in any modern browser.
 
 ### Local Installation
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/signflow.git
+   git clone https://github.com/lumiquiver/signflow.git
    cd signflow
    ```
 
@@ -138,4 +138,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Contact
 
-For questions or feedback, please open an issue on GitHub or contact us at your-email@example.com
+For questions or feedback, please open an issue on GitHub or reach out through my GitHub profile [@lumiquiver](https://github.com/lumiquiver)

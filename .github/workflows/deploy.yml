@@ -29,7 +29,7 @@ jobs:
       - name: Build
         run: |
           # Set the base path for GitHub Pages deployment
-          sed -i 's#base: "/"#base: "/sign-language-translator/"#g' vite.config.ts
+          sed -i 's#base: "/"#base: "/signflow/"#g' vite.config.ts
           npm run build
       
       - name: Setup Pages

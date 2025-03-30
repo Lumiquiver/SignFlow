@@ -1,108 +1,141 @@
-# Sign Language Translator
+# SignFlow: Real-Time Sign Language Translator
 
-A web-based sign language translator that uses machine learning and computer vision to convert American Sign Language (ASL) into real-time text output.
+SignFlow is a web-based application that translates American Sign Language (ASL) gestures into text in real-time using your webcam. The application leverages machine learning and computer vision to provide an accessible communication tool for both deaf and hearing individuals.
+
+![SignFlow Demo](https://github.com/yourusername/signflow/raw/main/screenshot.png)
 
 ## Features
 
-- Real-time hand gesture detection
-- Translation of ASL alphabet, words, and phrases
-- User-friendly, accessible interface
-- Optimized for performance with TensorFlow.js
-- Responsive design for mobile and desktop use
+- **Real-time Sign Language Translation**: Translate ASL hand gestures into text with your webcam
+- **Multi-gesture Support**: Recognizes both alphabets and common phrases
+- **Learning Mode**: Practice and learn new signs with feedback
+- **Offline Capability**: Works without an internet connection after initial load
+- **Mobile-Responsive Design**: Use on any device with a camera
+- **Accessibility-Focused**: High contrast UI with clear text for all users
+- **Privacy-First**: All processing happens locally on your device
 
-## Technologies Used
+## Live Demo
 
-- React with TypeScript
-- TensorFlow.js and Handpose model
-- Express backend (optional, for local development)
-- Shadcn UI components with Tailwind CSS
-- PostgreSQL database (optional, for local development)
+Try the live application at: [https://yourusername.github.io/signflow](https://yourusername.github.io/signflow)
+
+## How It Works
+
+SignFlow uses TensorFlow.js and the handpose model to detect hand landmarks from your webcam feed. These landmarks are then processed through our custom gesture recognition algorithm that matches finger positions against known sign patterns from the Microsoft American Sign Language (MS-ASL) dataset.
+
+The application features:
+- Hand position and orientation detection
+- Finger extension pattern matching
+- Confidence threshold adjustments for different gesture types
+- Gesture sequence recognition for phrases
 
 ## Getting Started
 
-### Prerequisites
+### Online Use
+Simply visit [https://yourusername.github.io/signflow](https://yourusername.github.io/signflow) in any modern browser.
 
-- Node.js (version 18+)
-- npm or yarn
-- Git
+### Local Installation
 
-### Installation
-
-1. Clone the repository
-   ```bash
-   git clone https://github.com/yourusername/sign-language-translator.git
-   cd sign-language-translator
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/signflow.git
+   cd signflow
    ```
 
-2. Install dependencies
-   ```bash
+2. Install dependencies:
+   ```
    npm install
    ```
 
-3. Start the development server
-   ```bash
+3. Start the development server:
+   ```
    npm run dev
    ```
 
-4. Open your browser and navigate to http://localhost:5000
+4. Open your browser to `http://localhost:5000`
 
-## Deployment Options
+## Usage Guide
 
-### GitHub Pages (Static Frontend Only)
+1. **Allow Camera Access**: When prompted, allow the application to access your webcam
+2. **Position Your Hand**: Center your hand in the camera view
+3. **Make ASL Signs**: Form ASL signs with your hand
+4. **View Results**: Recognized signs appear in the translation panel
+5. **Browse Categories**: Use the Categories button to explore available signs
+6. **Adjust Settings**: Customize recognition sensitivity in Settings
 
-This application has been configured to work on GitHub Pages with a static frontend. The backend API calls are replaced with static data when deployed to a `github.io` domain.
+## Recognized Signs
 
-Follow these steps to deploy to GitHub Pages:
+SignFlow currently recognizes:
+- All 26 letters of the ASL alphabet (A-Z)
+- Common phrases: "Hello", "Thank You", "Please", "Yes", "No", "Good", "Bad", "Love"
+- Additional signs are being added regularly
 
-1. Fork or clone this repository
-2. Make any desired changes
-3. Follow one of these deployment methods:
+## Technologies Used
 
-#### Method 1: Automatic GitHub Actions Deployment
+- **Frontend**: React, TailwindCSS, shadcn/ui
+- **Backend**: Node.js, Express
+- **Database**: PostgreSQL (optional)
+- **Machine Learning**: TensorFlow.js, handpose model
+- **Deployment**: GitHub Pages
 
-The repository includes a GitHub Actions workflow that will automatically build and deploy the site to GitHub Pages when you push to the main branch.
+## Local Development
 
-1. In your repository settings, enable GitHub Pages
-2. Select the `gh-pages` branch as the source
-3. Push changes to the main branch
-4. GitHub Actions will build and deploy automatically
+### Project Structure
 
-#### Method 2: Manual Deployment
+```
+signflow/
+├── client/            # Frontend React application
+│   ├── src/
+│   │   ├── components/  # UI components
+│   │   ├── data/        # Static gesture data
+│   │   ├── hooks/       # Custom hooks
+│   │   ├── lib/         # Utility functions
+│   │   └── pages/       # Application pages
+├── server/            # Backend Express server
+│   ├── routes.ts      # API endpoints
+│   └── storage.ts     # Data storage layer
+├── shared/            # Shared type definitions
+└── docs/              # Documentation files
+```
 
-1. Build the project
-   ```bash
-   npm run build
+### Database Setup (Optional)
+
+The application works with an in-memory database by default, but PostgreSQL support is available:
+
+1. Create a PostgreSQL database
+2. Set the `DATABASE_URL` environment variable
+3. Run the application with the following command:
+   ```
+   npm run dev
    ```
 
-2. Copy the contents of the `dist/public` directory to the `docs` folder
-   ```bash
-   mkdir -p docs
-   cp -r dist/public/* docs/
-   ```
+### GitHub Pages Deployment
 
-3. Push the changes to GitHub
-   ```bash
-   git add docs
-   git commit -m "Update GitHub Pages build"
-   git push
-   ```
+The application can be deployed to GitHub Pages automatically using the included GitHub Actions workflow:
 
-4. In your repository settings, enable GitHub Pages and select the main branch and `/docs` folder as the source
+1. Push your code to GitHub
+2. Go to the Actions tab in your repository
+3. The workflow will automatically build and deploy to GitHub Pages
 
-### Alternative Deployment Options
+## Contributing
 
-For a full-stack deployment with database support:
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-1. Deploy the backend to a service like Render, Railway, or Heroku
-2. Update the API endpoints in the frontend to point to your deployed backend
-3. Deploy the frontend to GitHub Pages or another static hosting service
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## Acknowledgments
+## Acknowledgements
 
-- Microsoft ASL dataset for training data
-- TensorFlow.js team for the Handpose model
-- Google Translate for UI inspiration
+- TensorFlow.js team for the handpose model
+- Microsoft Research for the MS-ASL dataset
+- All contributors who have helped improve SignFlow
+
+## Contact
+
+For questions or feedback, please open an issue on GitHub or contact us at your-email@example.com

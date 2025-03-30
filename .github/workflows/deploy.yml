@@ -28,8 +28,8 @@ jobs:
       
       - name: Build
         run: |
-          # Set the base path for GitHub Pages deployment
-          sed -i 's#base: "/"#base: "/signflow/"#g' vite.config.ts
+          # Ensure the base path is correctly set for GitHub Pages
+          sed -i "s|base: ['\"]\?/['\"]|base: '/signflow/'|g" vite.config.ts
           npm run build
       
       - name: Setup Pages
@@ -38,7 +38,7 @@ jobs:
       - name: Copy build to docs folder
         run: |
           mkdir -p docs
-          cp -r dist/public/* docs/
+          cp -r dist/* docs/
       
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v2
@@ -48,7 +48,6 @@ jobs:
   deploy:
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: build
     steps:

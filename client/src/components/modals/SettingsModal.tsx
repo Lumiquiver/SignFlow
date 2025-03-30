@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,128 +12,430 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  LucideSettings, 
+  LucideCamera, 
+  LucideMonitor, 
+  LucideSparkles, 
+  LucideShield, 
+  LucideTrash2, 
+  LucideSave, 
+  LucideRotateCw,
+  LucideAlertCircle,
+  LucideCheck,
+  LucideX
+} from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
-import { LucideSettings, LucideCamera, LucideMonitor, LucideSparkles, LucideShield, LucideTrash2, LucideSave } from 'lucide-react';
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
+// Define types for our settings
+interface CameraSettings {
+  resolution: string;
+  frameRate: number;
+  showBoundingBox: boolean;
+  showLandmarks: boolean;
+  flipCamera: boolean;
+}
+
+interface RecognitionSettings {
+  confidenceThreshold: number;
+  requiredMatches: number;
+  showConfidenceScore: boolean;
+  adaptiveThreshold: boolean;
+  ignoreBriefDetections: boolean;
+}
+
+interface DisplaySettings {
+  theme: string;
+  fontSize: number;
+  highContrast: boolean;
+  animateTransitions: boolean;
+  showDebugInfo: boolean;
+}
+
+interface AdvancedSettings {
+  useExperimentalFeatures: boolean;
+  powerSaveMode: boolean;
+  offlineMode: boolean;
+  analyticsEnabled: boolean;
+}
+
+interface PrivacySettings {
+  saveSessions: boolean;
+  shareImprovementData: boolean;
+  rememberSettings: boolean;
+  useLocalProcessing: boolean;
+}
+
+// Define the props for the SettingsModal component
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSettingsChange?: (settings: {
+    camera: CameraSettings;
+    recognition: RecognitionSettings;
+    display: DisplaySettings;
+    advanced: AdvancedSettings;
+    privacy: PrivacySettings;
+  }) => void;
 }
 
-export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+// Define default settings for initial state and resets
+const defaultCameraSettings: CameraSettings = {
+  resolution: "720p",
+  frameRate: 30,
+  showBoundingBox: true,
+  showLandmarks: false,
+  flipCamera: true
+};
+
+const defaultRecognitionSettings: RecognitionSettings = {
+  confidenceThreshold: 65,
+  requiredMatches: 2,
+  showConfidenceScore: true,
+  adaptiveThreshold: true,
+  ignoreBriefDetections: true
+};
+
+const defaultDisplaySettings: DisplaySettings = {
+  theme: "system",
+  fontSize: 16,
+  highContrast: false,
+  animateTransitions: true,
+  showDebugInfo: false
+};
+
+const defaultAdvancedSettings: AdvancedSettings = {
+  useExperimentalFeatures: false,
+  powerSaveMode: false,
+  offlineMode: false,
+  analyticsEnabled: true
+};
+
+const defaultPrivacySettings: PrivacySettings = {
+  saveSessions: false,
+  shareImprovementData: false,
+  rememberSettings: true,
+  useLocalProcessing: true
+};
+
+export default function SettingsModal({ 
+  isOpen, 
+  onClose, 
+  onSettingsChange 
+}: SettingsModalProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("camera");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [settingsApplied, setSettingsApplied] = useState(false);
   
   // Camera settings
-  const [cameraSettings, setCameraSettings] = useState({
-    resolution: "720p",
-    frameRate: 30,
-    showBoundingBox: true,
-    showLandmarks: false,
-    flipCamera: true
-  });
+  const [cameraSettings, setCameraSettings] = useState<CameraSettings>(defaultCameraSettings);
   
   // Recognition settings
-  const [recognitionSettings, setRecognitionSettings] = useState({
-    confidenceThreshold: 65,
-    requiredMatches: 2,
-    showConfidenceScore: true,
-    adaptiveThreshold: true,
-    ignoreBriefDetections: true
-  });
+  const [recognitionSettings, setRecognitionSettings] = useState<RecognitionSettings>(defaultRecognitionSettings);
   
   // Display settings
-  const [displaySettings, setDisplaySettings] = useState({
-    theme: "system",
-    fontSize: 16,
-    highContrast: false,
-    animateTransitions: true,
-    showDebugInfo: false
-  });
+  const [displaySettings, setDisplaySettings] = useState<DisplaySettings>(defaultDisplaySettings);
   
   // Advanced settings
-  const [advancedSettings, setAdvancedSettings] = useState({
-    useExperimentalFeatures: false,
-    powerSaveMode: false,
-    offlineMode: false,
-    analyticsEnabled: true
-  });
+  const [advancedSettings, setAdvancedSettings] = useState<AdvancedSettings>(defaultAdvancedSettings);
   
   // Privacy settings
-  const [privacySettings, setPrivacySettings] = useState({
-    saveSessions: false,
-    shareImprovementData: false,
-    rememberSettings: true,
-    useLocalProcessing: true
+  const [privacySettings, setPrivacySettings] = useState<PrivacySettings>(defaultPrivacySettings);
+
+  // Original settings to compare for unsaved changes
+  const [originalSettings, setOriginalSettings] = useState({
+    camera: { ...defaultCameraSettings },
+    recognition: { ...defaultRecognitionSettings },
+    display: { ...defaultDisplaySettings },
+    advanced: { ...defaultAdvancedSettings },
+    privacy: { ...defaultPrivacySettings }
   });
 
+  // Load settings from localStorage if enabled
+  useEffect(() => {
+    if (isOpen) {
+      loadSettings();
+      setHasUnsavedChanges(false);
+      setSettingsApplied(false);
+    }
+  }, [isOpen]);
+
+  // Track unsaved changes
+  useEffect(() => {
+    if (isOpen && !settingsApplied) {
+      const hasChanges = 
+        JSON.stringify(cameraSettings) !== JSON.stringify(originalSettings.camera) ||
+        JSON.stringify(recognitionSettings) !== JSON.stringify(originalSettings.recognition) ||
+        JSON.stringify(displaySettings) !== JSON.stringify(originalSettings.display) ||
+        JSON.stringify(advancedSettings) !== JSON.stringify(originalSettings.advanced) ||
+        JSON.stringify(privacySettings) !== JSON.stringify(originalSettings.privacy);
+      
+      setHasUnsavedChanges(hasChanges);
+    }
+  }, [
+    cameraSettings, 
+    recognitionSettings, 
+    displaySettings, 
+    advancedSettings, 
+    privacySettings, 
+    originalSettings,
+    settingsApplied,
+    isOpen
+  ]);
+
+  const loadSettings = () => {
+    try {
+      // Check if we should load saved settings
+      const savedPreference = localStorage.getItem('rememberSettings');
+      const shouldRememberSettings = savedPreference ? JSON.parse(savedPreference) : true;
+      
+      if (shouldRememberSettings) {
+        // Camera settings
+        const savedCamera = localStorage.getItem('cameraSettings');
+        const cameraSetting = savedCamera ? JSON.parse(savedCamera) : defaultCameraSettings;
+        setCameraSettings(cameraSetting);
+        
+        // Recognition settings
+        const savedRecognition = localStorage.getItem('recognitionSettings');
+        const recognitionSetting = savedRecognition ? JSON.parse(savedRecognition) : defaultRecognitionSettings;
+        setRecognitionSettings(recognitionSetting);
+        
+        // Display settings
+        const savedDisplay = localStorage.getItem('displaySettings');
+        const displaySetting = savedDisplay ? JSON.parse(savedDisplay) : defaultDisplaySettings;
+        setDisplaySettings(displaySetting);
+        
+        // Advanced settings
+        const savedAdvanced = localStorage.getItem('advancedSettings');
+        const advancedSetting = savedAdvanced ? JSON.parse(savedAdvanced) : defaultAdvancedSettings;
+        setAdvancedSettings(advancedSetting);
+        
+        // Privacy settings
+        const savedPrivacy = localStorage.getItem('privacySettings');
+        const privacySetting = savedPrivacy ? JSON.parse(savedPrivacy) : defaultPrivacySettings;
+        setPrivacySettings(privacySetting);
+        
+        // Set original settings for change detection
+        setOriginalSettings({
+          camera: { ...cameraSetting },
+          recognition: { ...recognitionSetting },
+          display: { ...displaySetting },
+          advanced: { ...advancedSetting },
+          privacy: { ...privacySetting }
+        });
+      } else {
+        // Use defaults if not remembering settings
+        resetToDefaults(false);
+      }
+    } catch (error) {
+      console.error("Error loading settings:", error);
+      // Fallback to defaults if there's an error
+      resetToDefaults(false);
+    }
+  };
+
+  const saveSettings = () => {
+    try {
+      // Store the settings if remember settings is enabled
+      if (privacySettings.rememberSettings) {
+        localStorage.setItem('cameraSettings', JSON.stringify(cameraSettings));
+        localStorage.setItem('recognitionSettings', JSON.stringify(recognitionSettings));
+        localStorage.setItem('displaySettings', JSON.stringify(displaySettings));
+        localStorage.setItem('advancedSettings', JSON.stringify(advancedSettings));
+        localStorage.setItem('privacySettings', JSON.stringify(privacySettings));
+        localStorage.setItem('rememberSettings', JSON.stringify(privacySettings.rememberSettings));
+      }
+      
+      // Apply theme changes
+      if (displaySettings.theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else if (displaySettings.theme === 'light') {
+        document.documentElement.classList.remove('dark');
+      } else {
+        // System preference
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      }
+      
+      // Apply font size
+      document.documentElement.style.fontSize = `${displaySettings.fontSize}px`;
+      
+      // Apply high contrast if enabled
+      if (displaySettings.highContrast) {
+        document.documentElement.classList.add('high-contrast');
+      } else {
+        document.documentElement.classList.remove('high-contrast');
+      }
+      
+      // Call the onSettingsChange callback if provided
+      if (onSettingsChange) {
+        onSettingsChange({
+          camera: cameraSettings,
+          recognition: recognitionSettings,
+          display: displaySettings,
+          advanced: advancedSettings,
+          privacy: privacySettings
+        });
+      }
+      
+      // Update original settings to reflect the saved values
+      setOriginalSettings({
+        camera: { ...cameraSettings },
+        recognition: { ...recognitionSettings },
+        display: { ...displaySettings },
+        advanced: { ...advancedSettings },
+        privacy: { ...privacySettings }
+      });
+      
+      setHasUnsavedChanges(false);
+      setSettingsApplied(true);
+      
+      // Show success toast
+      toast({
+        title: "Settings Saved",
+        description: "Your preferences have been updated",
+      });
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      toast({
+        title: "Error Saving Settings",
+        description: "There was a problem saving your preferences",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleSaveSettings = () => {
-    // Here we would normally save settings to user preferences
-    // For demo, we'll just show a toast
+    saveSettings();
+    setHasUnsavedChanges(false);
+    setSettingsApplied(false);
     toast({
-      title: "Settings Saved",
-      description: "Your preferences have been updated",
+      title: "Settings saved",
+      description: "Your preferences have been saved.",
+      variant: "default",
     });
     onClose();
   };
 
-  const handleResetSettings = () => {
-    // Reset settings to defaults
-    setCameraSettings({
-      resolution: "720p",
-      frameRate: 30,
-      showBoundingBox: true,
-      showLandmarks: false,
-      flipCamera: true
-    });
-    
-    setRecognitionSettings({
-      confidenceThreshold: 65,
-      requiredMatches: 2,
-      showConfidenceScore: true,
-      adaptiveThreshold: true,
-      ignoreBriefDetections: true
-    });
-    
-    setDisplaySettings({
-      theme: "system",
-      fontSize: 16,
-      highContrast: false,
-      animateTransitions: true,
-      showDebugInfo: false
-    });
-    
-    setAdvancedSettings({
-      useExperimentalFeatures: false,
-      powerSaveMode: false,
-      offlineMode: false,
-      analyticsEnabled: true
-    });
-    
-    setPrivacySettings({
-      saveSessions: false,
-      shareImprovementData: false,
-      rememberSettings: true,
-      useLocalProcessing: true
-    });
-    
+  const handleApplyChanges = () => {
+    saveSettings();
+    setSettingsApplied(true);
     toast({
-      title: "Settings Reset",
-      description: "All settings have been reset to defaults",
+      title: "Settings applied",
+      description: "Changes have been applied. Save to keep them permanently.",
+      variant: "default",
     });
   };
 
+
+  const resetToDefaults = (showToast = true) => {
+    // Reset settings to defaults
+    setCameraSettings({ ...defaultCameraSettings });
+    setRecognitionSettings({ ...defaultRecognitionSettings });
+    setDisplaySettings({ ...defaultDisplaySettings });
+    setAdvancedSettings({ ...defaultAdvancedSettings });
+    setPrivacySettings({ ...defaultPrivacySettings });
+    
+    // Update original settings 
+    setOriginalSettings({
+      camera: { ...defaultCameraSettings },
+      recognition: { ...defaultRecognitionSettings },
+      display: { ...defaultDisplaySettings },
+      advanced: { ...defaultAdvancedSettings },
+      privacy: { ...defaultPrivacySettings }
+    });
+    
+    if (showToast) {
+      toast({
+        title: "Settings Reset",
+        description: "All settings have been reset to defaults",
+      });
+    }
+  };
+
+  const handleResetSettings = () => {
+    resetToDefaults();
+  };
+  
+  const handleDeleteAllData = () => {
+    try {
+      // Clear all saved settings and data from localStorage
+      localStorage.clear();
+      
+      // Reset to defaults
+      resetToDefaults(false);
+      
+      toast({
+        title: "Data Deleted",
+        description: "All saved data has been removed from this device",
+        variant: "default"
+      });
+      
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      console.error("Error deleting data:", error);
+      toast({
+        title: "Error Deleting Data",
+        description: "There was a problem removing saved data",
+        variant: "destructive"
+      });
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold text-primary flex items-center gap-2">
-            <LucideSettings className="h-6 w-6" /> Settings
-          </DialogTitle>
-          <DialogDescription>
-            Customize your Sign Language Translator experience
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-primary flex items-center gap-2">
+              <LucideSettings className="h-6 w-6" /> Settings
+            </DialogTitle>
+            <DialogDescription>
+              Customize your Sign Language Translator experience
+            </DialogDescription>
+          </DialogHeader>
+          
+          {hasUnsavedChanges && !settingsApplied && (
+            <div className="bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 p-3 rounded-md flex items-center gap-3 mb-4">
+              <LucideAlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0" />
+              <div className="flex-1 text-sm text-yellow-800 dark:text-yellow-200">
+                You have unsaved changes. Apply changes to see their effect or save to keep them.
+              </div>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="flex-shrink-0 bg-white dark:bg-transparent"
+                onClick={handleApplyChanges}
+              >
+                Apply
+              </Button>
+            </div>
+          )}
+          
+          {settingsApplied && (
+            <div className="bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700 p-3 rounded-md flex items-center gap-3 mb-4">
+              <LucideCheck className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />
+              <div className="flex-1 text-sm text-green-800 dark:text-green-200">
+                Settings applied successfully. Click Save to keep these changes.
+              </div>
+            </div>
+          )}
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
           <TabsList className="grid grid-cols-5">
@@ -511,5 +813,34 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         </div>
       </DialogContent>
     </Dialog>
+      
+      {/* Delete Data Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <LucideTrash2 className="h-5 w-5" />
+              Delete All Saved Data
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove all your settings, learning progress, bookmarks, and any other saved data from this device. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="gap-2">
+              <LucideX className="h-4 w-4" />
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteAllData}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
+            >
+              <LucideTrash2 className="h-4 w-4" />
+              Delete All Data
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

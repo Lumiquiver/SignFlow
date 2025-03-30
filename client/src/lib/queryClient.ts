@@ -1,4 +1,8 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { staticApiService } from "./staticApiService";
+
+// Check if we're in GitHub Pages environment
+const isGitHubPages = window.location.hostname.includes('github.io');
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -12,6 +16,49 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  // For GitHub Pages, intercept API requests and use static data
+  if (isGitHubPages && url.startsWith('/api/')) {
+    let result;
+    
+    // Handle different API endpoints
+    if (url === '/api/gestures') {
+      result = await staticApiService.getAllGestures();
+    } 
+    else if (url.startsWith('/api/gestures/type/')) {
+      const type = url.split('/').pop();
+      if (type) {
+        result = await staticApiService.getGesturesByType(type);
+      }
+    }
+    else if (url.startsWith('/api/gestures/category/')) {
+      const category = url.split('/').pop();
+      if (category) {
+        result = await staticApiService.getGesturesByCategory(category);
+      }
+    }
+    else if (url.startsWith('/api/gestures/name/')) {
+      const name = url.split('/').pop();
+      if (name) {
+        result = await staticApiService.getGestureByName(name);
+      }
+    }
+    else if (url.startsWith('/api/gestures/id/')) {
+      const id = parseInt(url.split('/').pop() || '0');
+      if (id) {
+        result = await staticApiService.getGesture(id);
+      }
+    }
+    
+    // Create a mock response
+    const mockResponse = new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    return mockResponse;
+  }
+  
+  // Normal API request for local development
   const res = await fetch(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
@@ -29,6 +76,32 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    // For GitHub Pages, intercept API requests and use static data
+    if (isGitHubPages && (queryKey[0] as string).startsWith('/api/')) {
+      const url = queryKey[0] as string;
+      let result;
+      
+      // Handle different API endpoints
+      if (url === '/api/gestures') {
+        result = await staticApiService.getAllGestures();
+      } 
+      else if (url.startsWith('/api/gestures/type/')) {
+        const type = url.split('/').pop();
+        if (type) {
+          result = await staticApiService.getGesturesByType(type);
+        }
+      }
+      else if (url.startsWith('/api/gestures/category/')) {
+        const category = url.split('/').pop();
+        if (category) {
+          result = await staticApiService.getGesturesByCategory(category);
+        }
+      }
+      
+      return result;
+    }
+    
+    // Normal API request for local development
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
     });
